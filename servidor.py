@@ -299,7 +299,13 @@ def montar_instrucoes_ia():
     )
 
 
-@socketio.on("chat_ia_perguntar")
+@socketio.on("connect", namespace="/ia")
+def conectar_ia():
+    if not GROQ_API_KEY:
+        return False
+
+
+@socketio.on("chat_ia_perguntar", namespace="/ia")
 def responder_chat_ia(dados):
     pergunta = str((dados or {}).get("pergunta", "")).strip()
     if not GROQ_API_KEY:
