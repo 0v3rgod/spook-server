@@ -637,7 +637,7 @@ def executar_comando_catalogo(dados):
                 emit("resultado_comando", {"ok": False, "erro": resultado.stderr.strip() or "Não foi possível obter o IP público"})
                 return
             relatorio = salvar_relatorio("ip_publico", "IP público", ip)
-            emit("resultado_comando", {"ok": True, "erro": f"IP: {ip} | Relatório: {relatorio.name}"})
+            emit("resultado_comando", {"ok": True, "erro": "", "saida": f"IP público: {ip}\nRelatório: {relatorio.name}"})
 
         elif comando == "hyprctl dispatch lock-screen":
             subprocess.run(["hyprctl", "dispatch", "lock-screen"], timeout=5, check=True)
