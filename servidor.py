@@ -30,7 +30,14 @@ import struct
 import termios
 import sys
 import requests
-from servidor_bluetooth import CAMINHO_PERFIL, UUID_PENTESTLINK, PerfilPentestLink
+from dotenv import load_dotenv
+
+load_dotenv()
+
+try:
+    from servidor_bluetooth import CAMINHO_PERFIL, UUID_PENTESTLINK, PerfilPentestLink
+except Exception:
+    CAMINHO_PERFIL = UUID_PENTESTLINK = PerfilPentestLink = None
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", ping_timeout=60, ping_interval=25, max_http_buffer_size=25 * 1024 * 1024)
@@ -62,6 +69,10 @@ def carregar_configuracao():
             if "=" in linha and not linha.startswith("#"):
                 chave, valor = linha.split("=", 1)
                 configuracao[chave] = valor
+    for chave in ("GROQ_API_KEY", "GROQ_MODEL", "FILEBROWSER_URL", "FILEBROWSER_USERNAME", "FILEBROWSER_PASSWORD"):
+        valor = os.environ.get(chave)
+        if valor:
+            configuracao[chave] = valor
     return configuracao
 
 
@@ -71,6 +82,7 @@ FILEBROWSER_USERNAME = CONFIGURACAO.get("FILEBROWSER_USERNAME", "")
 FILEBROWSER_PASSWORD = CONFIGURACAO.get("FILEBROWSER_PASSWORD", "")
 GROQ_API_KEY = CONFIGURACAO.get("GROQ_API_KEY", "")
 GROQ_MODEL = CONFIGURACAO.get("GROQ_MODEL", "openai/gpt-oss-20b")
+MODO_CLOUD = os.environ.get("RENDER") or os.environ.get("RAILWAY") or os.environ.get("FLY_APP_NAME") or False
 filebrowser_sessao = requests.Session()
 filebrowser_token = None
 filebrowser_lock = threading.Lock()
@@ -754,8 +766,9 @@ def monitorar_clipboard():
             socketio.emit("clipboard_notebook", {"texto": atual})
 
 
-threading.Thread(target=monitorar_clipboard, daemon=True).start()
-threading.Thread(target=emitir_metricas_periodicas, daemon=True).start()
+if not MODO_CLOUD:
+    threading.Thread(target=monitorar_clipboard, daemon=True).start()
+    threading.Thread(target=emitir_metricas_periodicas, daemon=True).start()
 
 def iniciar_bluetooth_thread():
     import threading
@@ -793,6 +806,7 @@ def iniciar_bluetooth_thread():
 
 
 if __name__ == "__main__":
-    iniciar_bluetooth_thread()
+    if not MODO_CLOUD:
+        iniciar_bluetooth_thread()
     print("[HTTP] Servidor HTTP na porta 5000")
     socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True, use_reloader=False)
