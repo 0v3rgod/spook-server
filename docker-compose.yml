@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  spook-proxy:
+    build: .
+    container_name: spook-proxy
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    # healthcheck opcional
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/info_sistema', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
