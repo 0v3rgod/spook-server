@@ -56,9 +56,9 @@ PASTA_COMPARTILHADOS = Path.home() / "pentestlink-servidor" / "compartilhados"
 PASTA_RELATORIOS = Path.home() / "pentestlink-servidor" / "relatorios"
 ARQUIVO_NOTIFICACOES = Path.home() / "pentestlink-servidor" / "notificacoes.jsonl"
 ARQUIVO_CONFIGURACAO = Path.home() / "pentestlink-servidor" / ".env"
-PASTA_RECEBIDOS.mkdir(exist_ok=True)
-PASTA_COMPARTILHADOS.mkdir(exist_ok=True)
-PASTA_RELATORIOS.mkdir(exist_ok=True)
+PASTA_RECEBIDOS.mkdir(parents=True, exist_ok=True)
+PASTA_COMPARTILHADOS.mkdir(parents=True, exist_ok=True)
+PASTA_RELATORIOS.mkdir(parents=True, exist_ok=True)
 PASTA_RELATORIOS.chmod(0o700)
 
 
