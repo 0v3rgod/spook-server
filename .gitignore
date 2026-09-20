@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+*.log
+*.jsonl
+.directory
+compartilhados/
+recebidos/
+relatorios/
+relatorios/
+chave_publica_celular.pem
+resultados_scan.txt
+notificacoes.jsonl
