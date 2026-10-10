@@ -30,8 +30,10 @@ import fcntl
 import struct
 import termios
 import sys
+import socket
 import collections
 import requests
+import uuid
 import hub_store
 from dotenv import load_dotenv
 
@@ -53,6 +55,16 @@ chave_publica_pem = chave_privada.public_key().public_bytes(
 ).decode("utf-8")
 
 bateria_celular = {"nivel": None}
+# Presença do CELULAR real no servidor: qualquer cliente que conecta a partir de
+# um IP que NAO e o proprio Arch (overlay/TUI ficam em 127.0.0.1 ou na tailscale
+# do Arch) = o app do celular. Nao depende do streaming de bateria/GPS.
+_REMOTO_IP_NAO_CEL = {"127.0.0.1", "100.78.69.110"}
+_remoto_sids = set()
+
+
+def _client_remoto():
+    ip = str(request.environ.get("REMOTE_ADDR", ""))
+    return ip not in _REMOTO_IP_NAO_CEL
 ignorar_proxima_leitura_clipboard = {"valor": False}
 
 PASTA_RECEBIDOS = Path.home() / "pentestlink-servidor" / "recebidos"
@@ -61,6 +73,10 @@ PASTA_RELATORIOS = Path.home() / "pentestlink-servidor" / "relatorios"
 RELATORIOS_DRIVE = "relatorios"
 ARQUIVO_NOTIFICACOES = Path.home() / "pentestlink-servidor" / "notificacoes.jsonl"
 ARQUIVO_CONFIGURACAO = Path.home() / "pentestlink-servidor" / ".env"
+ARQUIVO_SPOOK_II_COMANDO = Path("/tmp/spook-ii-command.json")
+ARQUIVO_SPOOK_II_ESTADO = Path("/tmp/spook-ii-state.json")
+ARQUIVO_BRIGHT_PROTECT = Path.home() / ".local" / "state" / "pentestlink" / "bright_protect"
+ARQUIVO_BRIGHT_PROTECT.parent.mkdir(parents=True, exist_ok=True)
 PASTA_RECEBIDOS.mkdir(parents=True, exist_ok=True)
 PASTA_COMPARTILHADOS.mkdir(parents=True, exist_ok=True)
 PASTA_RELATORIOS.mkdir(parents=True, exist_ok=True)
@@ -215,26 +231,27 @@ CATALOGO_COMANDOS = {
         {"nome": "Public IP", "comando": "ip_publico", "icone": "globe", "confirmar": False},
     ],
     "midia": [
-        {"nome": "Faixa Anterior", "comando": "media_prev", "icone": "skip_prev", "confirmar": False},
+        {"nome": "Previous Track", "comando": "media_prev", "icone": "skip_prev", "confirmar": False},
         {"nome": "Play/Pause", "comando": "media_toggle", "icone": "play", "confirmar": False},
-        {"nome": "Próxima Faixa", "comando": "media_next", "icone": "skip_next", "confirmar": False},
-        {"nome": "Diminuir Volume", "comando": "volume_down", "icone": "volume_down", "confirmar": False},
-        {"nome": "Aumentar Volume", "comando": "volume_up", "icone": "volume_up", "confirmar": False},
+        {"nome": "Next Track", "comando": "media_next", "icone": "skip_next", "confirmar": False},
+        {"nome": "Volume Down", "comando": "volume_down", "icone": "volume_down", "confirmar": False},
+        {"nome": "Volume Up", "comando": "volume_up", "icone": "volume_up", "confirmar": False},
     ],
-    "display": [
-        {"nome": "Brilho -", "comando": "brightness_down", "icone": "brightness_low", "confirmar": False},
-        {"nome": "Brilho +", "comando": "brightness_up", "icone": "brightness_high", "confirmar": False},
-        {"nome": "Luz Noturna", "comando": "night_light_toggle", "icone": "nightlight", "confirmar": False},
-        {"nome": "Proteção Brilho", "comando": "brightness_protection_toggle", "icone": "shield", "confirmar": False},
-        {"nome": "Modo Jogo", "comando": "game_mode_toggle", "icone": "sports_esports", "confirmar": False},
+    "controles": [
+        {"nome": "Bluetooth", "comando": "bluetooth_toggle", "icone": "bluetooth", "confirmar": False},
+        {"nome": "Notifications", "comando": "notifications_toggle", "icone": "notifications", "confirmar": False},
+        {"nome": "Keep Awake", "comando": "keep_awake_toggle", "icone": "coffee", "confirmar": False},
     ],
-    "rede_avancada": [
-        {"nome": "Cloudflare WARP", "comando": "warp_toggle", "icone": "cloud", "confirmar": False},
-        {"nome": "Notificações", "comando": "notifications_toggle", "icone": "notifications", "confirmar": False},
+    "tela": [
+        {"nome": "Brightness Down", "comando": "brightness_down", "icone": "brightness_low", "confirmar": False},
+        {"nome": "Brightness Up", "comando": "brightness_up", "icone": "brightness_high", "confirmar": False},
+        {"nome": "Night Light", "comando": "night_light_toggle", "icone": "nightlight", "confirmar": False},
+        {"nome": "Brightness Guard", "comando": "brightness_protection_toggle", "icone": "shield", "confirmar": False},
+        {"nome": "Dark Mode", "comando": "dark_mode_toggle", "icone": "contrast", "confirmar": False},
+        {"nome": "Game Mode", "comando": "game_mode_toggle", "icone": "sports_esports", "confirmar": False},
     ],
     "input": [
-        {"nome": "Controle Remoto", "comando": "remote_input", "icone": "keyboard", "confirmar": False},
-        {"nome": "Manter Acordado", "comando": "keep_awake_toggle", "icone": "coffee", "confirmar": False},
+        {"nome": "Remote Control", "comando": "remote_input", "icone": "keyboard", "confirmar": False},
     ],
 }
 
@@ -247,6 +264,38 @@ def executar_no_redmi(comando):
         check=True,
     ).stdout.strip()
 
+
+def coletar_info_arch():
+    """Retorna info do próprio Arch (notebook), sem depender do celular."""
+    try:
+        import platform, psutil, socket, subprocess
+        hostname = platform.node()
+        # IP local (não loopback)
+        ips = []
+        for iface, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == socket.AF_INET and not addr.address.startswith("127."):
+                    ips.append(addr.address)
+        ip_local = ips[0] if ips else "N/A"
+        # Disco
+        disco = subprocess.run(["df", "-h", "/"], capture_output=True, text=True).stdout.strip().split("\n")[-1]
+        # Memória
+        ram = psutil.virtual_memory()
+        return {
+            "arch": {
+                "hostname": hostname,
+                "ip_local": ip_local,
+                "cpus": psutil.cpu_count(),
+                "ram_total_gb": round(ram.total / (1024**3), 1),
+                "ram_usado_gb": round(ram.used / (1024**3), 1),
+                "ram_percent": ram.percent,
+                "disco": disco,
+                "kernel": platform.release(),
+                "sistema": platform.system(),
+            }
+        }
+    except Exception as e:
+        return {"arch": {"erro": str(e)}}
 
 def coletar_info_servidor():
     try:
@@ -332,6 +381,7 @@ def conectar_ia():
 @socketio.on("chat_ia_perguntar", namespace="/ia")
 def responder_chat_ia(dados):
     pergunta = str((dados or {}).get("pergunta", "")).strip()
+    sessao_id = str((dados or {}).get("sessao_id", "")).strip() or request.sid
     if not GROQ_API_KEY:
         emit("chat_ia_resposta", {"ok": False, "resposta": "IA não configurada. Adicione GROQ_API_KEY no servidor."})
         return
@@ -364,7 +414,7 @@ def responder_chat_ia(dados):
         ).strip()
         if not conteudo:
             raise ValueError("Resposta vazia da IA")
-        emit("chat_ia_resposta", {"ok": True, "resposta": conteudo})
+        emit("chat_ia_resposta", {"ok": True, "resposta": conteudo, "sessao_id": sessao_id})
     except requests.RequestException as erro:
         emit("chat_ia_resposta", {"ok": False, "resposta": f"Falha na IA: {erro}"})
     except (KeyError, IndexError, TypeError, ValueError):
@@ -374,7 +424,27 @@ def responder_chat_ia(dados):
 def salvar_relatorio(nome, titulo, resultado):
     instante = time.strftime("%Y-%m-%d %H:%M:%S %z")
     arquivo = PASTA_RELATORIOS / f"{nome}_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-    arquivo.write_text(f"{titulo}\nGerado: {instante}\n\n{resultado}", encoding="utf-8")
+    # cabecalho no mesmo formato do agente do Termux, pra pasta unica no Drive.
+    # o titulo pode vir multi-linha ("perfil alvo\n$ comando"): separa em
+    # PROFILE/COMMAND em vez de deixar a 2a linha invadir o cabecalho.
+    linhas_titulo = [l.strip() for l in str(titulo or "").splitlines() if l.strip()]
+    perfil = linhas_titulo[0] if linhas_titulo else nome
+    comando = next((l.lstrip("$ ").strip() for l in linhas_titulo[1:] if l.strip().startswith("$")), "")
+    corpo = str(resultado or "").rstrip()
+    cabecalho = "\n".join([
+        "=" * 68,
+        "  SPOOK  //  SCAN REPORT",
+        "=" * 68,
+        "  PROFILE  : %s" % perfil,
+        "  SOURCE   : SPOOK-IA (servidor Arch)",
+        "  HOST     : %s" % socket.gethostname(),
+        "  DATE     : %s" % instante,
+    ] + (["  COMMAND  : %s" % comando] if comando else []) + [
+        "-" * 68,
+        "",
+    ])
+    rodape = "\n".join(["", "=" * 68, "  END OF REPORT  //  SPOOK", "=" * 68, ""])
+    arquivo.write_text(cabecalho + corpo + rodape, encoding="utf-8")
     arquivo.chmod(0o600)
     try:
         subprocess.run(["rclone", "copyto", str(arquivo), f"gdrive:SPOOK/{RELATORIOS_DRIVE}/{arquivo.name}"], timeout=60, capture_output=True)
@@ -387,15 +457,172 @@ def executar_diagnostico(comando):
     acoes = {
         "diagnostico_interfaces": ("Interfaces de rede", ["ip", "-brief", "address"]),
         "diagnostico_rotas": ("Tabela de rotas", ["ip", "route", "show"]),
-        "diagnostico_dns": ("Configuração DNS", ["resolvectl", "status"]),
-        "diagnostico_portas_locais": ("Portas locais em escuta", ["ss", "-tulpen"]),
+        "diagnostico_dns": ("Configuração DNS", ["resolvectl", "status"]),        "diagnostico_portas_locais": ("Portas locais em escuta", ["ss", "-tulpen"]),
         "diagnostico_tailscale": ("Status Tailscale", ["tailscale", "status"]),
     }
     titulo, argv = acoes[comando]
     resultado = subprocess.run(argv, capture_output=True, text=True, timeout=20, check=False)
+    # resolvectl nao existe/nao roda em sistemas sem systemd-resolved (Arch puro):
+    # cai para o arquivo, que e a fonte real de DNS da maquina.
+    if comando == "diagnostico_dns" and resultado.returncode != 0:
+        fallback = subprocess.run(["cat", "/etc/resolv.conf"], capture_output=True,
+                                  text=True, timeout=10, check=False)
+        if fallback.stdout.strip():
+            argv = ["cat", "/etc/resolv.conf"]
+            resultado = fallback
     saida = resultado.stdout or resultado.stderr or "Nenhuma saída disponível."
     relatorio = salvar_relatorio(comando, titulo, saida)
     return relatorio.name, resultado.returncode, saida
+
+
+def _binario_disponivel(*nomes):
+    """Primeiro executavel encontrado no PATH entre os nomes informados."""
+    for nome in nomes:
+        for pasta in os.environ.get("PATH", "").split(os.pathsep):
+            caminho = os.path.join(pasta, nome)
+            if os.path.isfile(caminho) and os.access(caminho, os.X_OK):
+                return nome
+    return None
+
+
+# O Arch nao tem 'nc' (pacote openbsd-netcat) nem 'whatweb' (so AUR).
+# ncat vem junto com o nmap e serve o mesmo proposito, entao preferimos ele.
+_NC = _binario_disponivel("ncat", "nc", "netcat") or "nc"
+_TRACE = _binario_disponivel("traceroute") or _binario_disponivel("tracepath") or "traceroute"
+_WHATWEB = _binario_disponivel("whatweb")
+_WHOIS = _binario_disponivel("whois")
+
+
+def _wordlist(*nomes):
+    """Primeira wordlist existente. SecLists fica em wordlists/ dentro do projeto."""
+    candidatos = []
+    for nome in nomes:
+        candidatos += [
+            str(Path.home() / "pentestlink-servidor" / "wordlists" / nome),
+            f"/usr/share/wordlists/{nome}",
+            f"/usr/share/wordlists/SecLists/Discovery/Web-Content/{nome}",
+            f"/opt/SecLists/Discovery/Web-Content/{nome}",
+        ]
+    for caminho in candidatos:
+        if os.path.isfile(caminho):
+            return caminho
+    return candidatos[0] if candidatos else ""
+
+
+_WORDLIST_COMMON = _wordlist("common.txt")
+_WORDLIST_SUBDOMAINS = _wordlist("subdomains.txt", "subdomains-all.txt")
+
+# whatweb e so AUR; quando falta, os scripts http do nmap dao a mesma informacao
+_WHATWEB_CMD = (f"whatweb {{alvo}}" if _WHATWEB
+                else "nmap -sV --script http-title,http-headers,http-server-header "
+                     "--script-args http.useragent=Spook {alvo}")
+
+# whois tambem nao vem instalado; RDAP over HTTPS e o equivalente moderno
+_WHOIS_CMD = (f"whois {{alvo}}" if _WHOIS
+              else 'curl -sL --max-time 25 -H "Accept: application/rdap+json" '
+                   '"https://rdap.org/$(case {alvo} in *[0-9].[0-9]|[0-9]*) echo ip;; *) echo domain;; esac)/{alvo}"')
+
+SCANS_CMD_IA = {
+    "LIVE HOST": "nmap -sn {alvo}",
+    "NETWORK SCANNER": "nmap -sn {alvo}",
+    "COMMON PORTS": "nmap -sT --top-ports 100 {alvo}",
+    "FULL PORTS": "nmap -p- --min-rate 3000 {alvo}",
+    "SERVICES": "nmap -sT -sV -p {portas} {alvo}",
+    "OS DETECTION": "nmap -sT -sV --osscan-limit {alvo}",
+    "COMPLETE SCAN": "nmap -sC -sV {alvo}",
+    "VULN SCAN": "nmap --script vuln {alvo}",
+    "VULN TARGETED": "nmap -sV --script vuln -p {portas} {alvo}",
+    "BANNER GRAB": 'for p in {portas}; do echo "=== porta $p ==="; timeout 6 ' + _NC + ' -nv {alvo} "$p" < /dev/null; done',
+    "HTTP HEADERS": "curl -I -L --max-redirs 3 --connect-timeout 10 --max-time 20 {alvo}",
+    "HTTP RESPONSE": "curl -L --max-redirs 3 --connect-timeout 10 --max-time 20 --range 0-204799 {alvo}",
+    "WHATWEB": _WHATWEB_CMD,
+    "GOBUSTER DIRS": f"gobuster dir -u {{alvo}} -w {_WORDLIST_COMMON} --no-error -b 403,404",
+    "NIKTO": "nikto -h {alvo}",
+    "DNS RECORDS": "nslookup {alvo}",
+    "DNS ANY": "nslookup -type=any {alvo}",
+    "SUBDOMAINS": f"gobuster dns -d {{alvo}} -w {_WORDLIST_SUBDOMAINS} --no-error",
+    "SMB ENUM": "nmap --script smb-enum-shares,smb-enum-users -p445 {alvo}",
+    "FTP ANON": "nmap --script ftp-anon -p21 {alvo}",
+    "WHOIS": _WHOIS_CMD,
+    "TRACEROUTE": f"{_TRACE} {{alvo}}",
+    "MY NETWORK": "ip -br addr; echo; hostname",
+    "LOCAL ENUM": "whoami; id; uname -a; echo; uptime; echo; ps aux --sort=-%cpu | head -15",
+    "SUID FIND": "find / -xdev -perm -4000 -type f -print 2>/dev/null | head -30",
+    "TCP CONNECT TEST": 'for p in {portas}; do timeout 8 ' + _NC + ' -vz -w 5 {alvo} "$p"; done',
+}
+
+# Scans que precisam de UM comando por porta: o nc aceita uma porta so.
+# "80,443" viraria um unico argumento invalido, entao a lista e normalizada
+# para espacos e o template itera com for.
+SCANS_LOOP_PORTA = {"BANNER GRAB", "TCP CONNECT TEST"}
+
+
+def executar_scan_ia(nome_scan, alvo="", portas=""):
+    """Executa um scan do catálogo no Arch e devolve resultado."""
+    cmd_template = SCANS_CMD_IA.get(nome_scan)
+    if not cmd_template:
+        return {"ok": False, "erro": f"Scan não encontrado: {nome_scan}"}
+    if "{alvo}" in cmd_template and not alvo:
+        return {"ok": False, "erro": "Scan requer alvo."}
+    if "{portas}" in cmd_template and not portas:
+        portas = "80,443,445,3389"
+    if nome_scan in SCANS_LOOP_PORTA:
+        lista = [p for p in re.split(r"[,\s]+", str(portas)) if p]
+        if not lista:
+            return {"ok": False, "erro": "Scan requer portas."}
+        portas = " ".join(lista)
+    comando = cmd_template.format(alvo=alvo or "", portas=portas)
+    nome_arquivo = nome_arquivo_seguro(nome_scan.replace(" ", "_"))
+    try:
+        resultado = subprocess.run(
+            ["bash", "-c", comando],
+            capture_output=True, text=True, timeout=300, check=False,
+        )
+        saida = (resultado.stdout or "") + (resultado.stderr or "")
+        saida = saida.strip() or "Nenhuma saída."
+        relatorio = salvar_relatorio(f"ia_scan_{nome_arquivo}", f"Scan IA: {nome_scan} {alvo}\n$ {comando}", saida)
+        return {"ok": True, "saida": f"{saida}\n\nRelatório: {relatorio.name}", "relatorio": relatorio.name}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "erro": f"Scan {nome_scan} excedeu 300s."}
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
+
+
+def executar_comando_ia(nome_comando):
+    """Executa comando do catálogo no Arch e devolve resultado (sem emitir no socket)."""
+    item = None
+    for categoria, comandos in CATALOGO_COMANDOS.items():
+        item = next((c for c in comandos if c["nome"] == nome_comando), None)
+        if item:
+            break
+    if item is None:
+        return {"ok": False, "erro": f"Comando não encontrado: {nome_comando}"}
+    comando = item["comando"]
+    try:
+        _detectar_env_hypr()
+        if comando == "screenshot":
+            caminho = PASTA_COMPARTILHADOS / f"screenshot_{int(time.time())}.png"
+            subprocess.run(["grim", str(caminho)], timeout=10, check=True)
+            return {"ok": True, "saida": f"Screenshot salvo em {caminho.name}", "relatorio": caminho.name}
+        if comando == "ip_publico":
+            resultado = subprocess.run(["curl", "-fsS", "--max-time", "10", "https://ifconfig.me/ip"], capture_output=True, text=True, timeout=15, check=False)
+            ip = resultado.stdout.strip()
+            if resultado.returncode != 0 or not ip:
+                return {"ok": False, "erro": resultado.stderr.strip() or "Falha ao obter IP público"}
+            relatorio = salvar_relatorio("ip_publico", "IP público", ip)
+            return {"ok": True, "saida": f"IP público: {ip}", "relatorio": relatorio.name}
+        if comando.startswith("diagnostico_"):
+            relatorio, codigo, saida = executar_diagnostico(comando)
+            if codigo == 0:
+                return {"ok": True, "saida": saida, "relatorio": relatorio}
+            return {"ok": False, "erro": saida}
+        if comando.startswith(("hyprctl", "systemctl", "loginctl", "pkill", "brightnessctl")):
+            resultado = subprocess.run(["bash", "-c", comando], capture_output=True, text=True, timeout=10, check=False)
+            saida = (resultado.stdout or "") + (resultado.stderr or "")
+            return {"ok": resultado.returncode == 0, "saida": saida.strip() or comando + " executado", "retorno": resultado.returncode}
+        return {"ok": False, "erro": f"Comando não suportado para IA: {nome_comando}"}
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}
 
 
 @app.route("/status")
@@ -495,11 +722,25 @@ def ao_conectar(auth=None):
     emit("bateria_notebook", {"nivel": metricas["bateria"]})
     emit("metricas_notebook", metricas)
     marcar_pareamento_confirmado()
+    # Presenca do celular real: origem diferente do proprio Arch = app do celular.
+    remoto = _client_remoto()
+    mudou = remoto and not _remoto_sids
+    if remoto:
+        _remoto_sids.add(request.sid)
+    if mudou:
+        emit("celular_presenca", {"online": True}, broadcast=True)
+    else:
+        # O cliente que acabou de conectar (overlay ou celular) recebe o estado atual.
+        emit("celular_presenca", {"online": bool(_remoto_sids)})
 
 
 @socketio.on("disconnect")
 def ao_desconectar():
     print("[DESCONECTADO] Celular desconectou.", flush=True)
+    if request.sid in _remoto_sids:
+        _remoto_sids.discard(request.sid)
+        if not _remoto_sids:
+            emit("celular_presenca", {"online": False}, broadcast=True)
 
 
 @socketio.on_error_default
@@ -685,7 +926,35 @@ def bateria_recebida(dados):
         f.write(str(nivel))
 
 
+def _atualizar_localizacao_arch():
+    """Uma passada: atualiza o geo do Arch (ipinfo) pro card LOCATION do app.
+
+    Sem isso o card mostrava "No Arch location" pra sempre: o endpoint
+    /localizacao so lia o que alguem tinha gravado antes. O loop de 30min
+    vive na thread (_loop_localizacao_arch), nao aqui -- handler de socket
+    nao pode segurar a requisicao.
+    """
+    import localizacao as loc
+    try:
+        loc.atualizar_arch()
+        print("[LOCALIZACAO] Arch atualizado via ip geolocation", flush=True)
+    except Exception as e:
+        print(f"[LOCALIZACAO ERRO] {e}", flush=True)
+
+
+def _loop_localizacao_arch():
+    while True:
+        _atualizar_localizacao_arch()
+        time.sleep(1800)
+
+
 @socketio.on("gps_celular")
+def _gps_celular(dados=None):
+    """O celular manda o GPS a cada 30s; aproveitamos pra refrescar o do Arch."""
+    _atualizar_localizacao_arch()
+    gps_recebido(dados or {})
+
+
 def gps_recebido(dados):
     try:
         import localizacao
@@ -759,6 +1028,39 @@ def rota_upload_media():
         return {"ok": False, "erro": str(e)}, 500
 
 
+@app.route("/relatorios")
+def rota_listar_relatorios():
+    """Lista os relatorios gerados no Arch (scans da IA, diagnosticos, comandos)."""
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip()
+    if not token or token != obter_token_sessao():
+        return {"ok": False, "erro": "Unauthorized"}, 401
+    try:
+        itens = []
+        for arquivo in sorted(PASTA_RELATORIOS.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True):
+            stat = arquivo.stat()
+            itens.append({
+                "nome": arquivo.name,
+                "bytes": stat.st_size,
+                "modificado": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
+            })
+        return {"ok": True, "items": itens[:200], "total": len(itens)}
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}, 500
+
+
+@app.route("/relatorios/<path:filename>")
+def rota_baixar_relatorio(filename):
+    try:
+        nome_seguro = nome_arquivo_seguro(filename)
+        caminho = PASTA_RELATORIOS / nome_seguro
+        if caminho.exists() and caminho.is_file():
+            return send_file(caminho)
+        return {"ok": False, "erro": "File not found"}, 404
+    except Exception as e:
+        return {"ok": False, "erro": str(e)}, 500
+
+
 @app.route("/media/<path:filename>")
 def rota_servir_media(filename):
     try:
@@ -793,6 +1095,21 @@ def notificacao_recebida(dados):
     with ARQUIVO_NOTIFICACOES.open("a", encoding="utf-8") as arquivo:
         arquivo.write(json.dumps(registro, ensure_ascii=False) + "\n")
     print(f"Notificação de {app_origem}: {titulo} - {texto}")
+    # O overlay (spook-overlay.py) escuta "notificacao_nova"; sem esse emit
+    # local a notificacao do celular so aparecia no historico/relay.
+    try:
+        socketio.emit("notificacao_nova", registro)
+    except Exception as e:
+        print(f"[NOTIF ERRO] emit local: {e}", flush=True)
+    # O overlay (spook-overlay.py) conecta no RELAY, nao no Arch: o evento tem
+    # que atravessar a ponte (Arch -> relay -> broadcast) para aparecer no canto.
+    try:
+        if relay_bridge_sio and relay_bridge_sio.connected:
+            relay_bridge_sio.emit("notificacao_celular", registro)
+        else:
+            print("[NOTIF] relay bridge offline: notificacao so no historico local", flush=True)
+    except Exception as e:
+        print(f"[NOTIF ERRO] relay: {e}", flush=True)
 
 
 @socketio.on("enviar_arquivo")
@@ -927,22 +1244,48 @@ def _emitir_chat_nova(msg):
     socketio.emit("chat_nova", msg)
 
 
+def _estado_ii():
+    try:
+        estado = json.loads(ARQUIVO_SPOOK_II_ESTADO.read_text(encoding="utf-8"))
+        return estado if isinstance(estado, dict) else {}
+    except Exception:
+        return {}
+
+
+def _executar_ii(acao, alvo):
+    pedido_id = str(uuid.uuid4())
+    temporario = ARQUIVO_SPOOK_II_COMANDO.with_suffix(".tmp")
+    temporario.write_text(json.dumps({"id": pedido_id, "action": acao, "target": bool(alvo)}), encoding="utf-8")
+    os.replace(temporario, ARQUIVO_SPOOK_II_COMANDO)
+    limite = time.monotonic() + 3
+    while time.monotonic() < limite:
+        estado = _estado_ii()
+        if estado.get("id") == pedido_id:
+            return estado
+        time.sleep(0.05)
+    raise RuntimeError("O painel ii não confirmou o comando. Verifique se o Quickshell está aberto.")
+
+
 def _estado_comando(comando):
     try:
-        if comando == "warp_toggle":
-            saida = subprocess.run(["warp-cli", "status"], capture_output=True, text=True, timeout=6, check=False).stdout or ""
-            return "Connected" in saida
+        estado_ii = _estado_ii()
+        if comando == "wifi_toggle":
+            return subprocess.run(["nmcli", "radio", "wifi"], capture_output=True, text=True, timeout=5, check=False).stdout.strip() == "enabled"
+        if comando == "bluetooth_toggle":
+            saida = subprocess.run(["bluetoothctl", "show"], capture_output=True, text=True, timeout=5, check=False).stdout
+            return "Powered: yes" in saida
         if comando == "game_mode_toggle":
-            return not _hypr_bool("animations:enabled")
+            return estado_ii.get("game_mode", not _hypr_bool("animations:enabled"))
+        if comando == "dark_mode_toggle":
+            return estado_ii.get("dark_mode", False)
         if comando == "keep_awake_toggle":
-            return subprocess.run(["systemctl", "--user", "is-active", "keep-awake.service"], capture_output=True, text=True, timeout=5, check=False).stdout.strip() == "active"
+            return estado_ii.get("keep_awake", False)
         if comando == "notifications_toggle":
-            # ativo = notificações do PC escondidas/silenciadas (marcador do ii)
-            return os.path.exists("/tmp/spook_notif_silent")
+            return estado_ii.get("notifications_silent", os.path.exists("/tmp/spook_notif_silent"))
         if comando == "night_light_toggle":
-            return _proc_rodando("hyprsunset")
+            return estado_ii.get("night_light", False)
         if comando == "brightness_protection_toggle":
-            return os.path.exists("/tmp/spook_bright_protect")
+            return ARQUIVO_BRIGHT_PROTECT.exists()
         if comando == "remote_input":
             return False
     except Exception:
@@ -957,6 +1300,45 @@ def _hypr_bool(chave):
         return saida.startswith("bool: true") or saida == "bool: true"
     except Exception:
         return False
+
+
+BRILHO_PROTECAO_PCT = 15
+
+
+def _dispositivo_backlight():
+    for nome in ("intel_backlight", "amdgpu_bl0", "nvidia_0", "dell_backlight", "asus_led_backlight"):
+        r = subprocess.run(["brightnessctl", "-d", nome, "get"], capture_output=True, text=True, timeout=3, check=False)
+        if r.returncode == 0 and r.stdout.strip().isdigit():
+            return nome
+    r = subprocess.run(["brightnessctl", "-l"], capture_output=True, text=True, timeout=3, check=False)
+    for linha in r.stdout.splitlines():
+        if "class 'backlight'" in linha and "Device '" in linha:
+            return linha.split("Device '", 1)[1].split("'", 1)[0]
+    return None
+
+
+def _brilho_pct():
+    dev = _dispositivo_backlight()
+    if not dev:
+        return None
+    atual = subprocess.run(["brightnessctl", "-d", dev, "get"], capture_output=True, text=True, timeout=3, check=False).stdout.strip()
+    maximo = subprocess.run(["brightnessctl", "-d", dev, "info"], capture_output=True, text=True, timeout=3, check=False).stdout
+    linhas = [l for l in maximo.splitlines() if "Max brightness" in l]
+    if not atual.isdigit() or not linhas:
+        return None
+    maximo = linhas[0].split(":")[-1].strip()
+    if not maximo.isdigit() or int(maximo) <= 0:
+        return None
+    return round(int(atual) * 100 / int(maximo))
+
+
+def _definir_brilho_pct(pct):
+    dev = _dispositivo_backlight()
+    if not dev:
+        return False
+    r = subprocess.run(["brightnessctl", "-d", dev, "set", f"{pct}%"], capture_output=True, text=True, timeout=5, check=False)
+    return r.returncode == 0
+
 
 
 _pc_notifs = {"ativo": True, "proc": None, "thread": None}
@@ -1019,7 +1401,7 @@ def executar_comando_catalogo(dados):
         item = next((c for c in comandos if c["nome"] == nome), None)
         if item: break
     if item is None:
-        emit("resultado_comando", {"ok": False, "erro": "Comando não encontrado no catálogo"})
+        emit("resultado_comando", {"ok": False, "erro": "Command not found in catalog"})
         return
     comando = item["comando"]
     try:
@@ -1032,36 +1414,36 @@ def executar_comando_catalogo(dados):
             resultado = subprocess.run(["curl", "-fsS", "--max-time", "10", "https://ifconfig.me/ip"], capture_output=True, text=True, timeout=15, check=False)
             ip = resultado.stdout.strip()
             if resultado.returncode != 0 or not ip:
-                emit("resultado_comando", {"ok": False, "erro": resultado.stderr.strip() or "Não foi possível obter o IP público"})
+                emit("resultado_comando", {"ok": False, "erro": resultado.stderr.strip() or "Could not get the public IP"})
                 return
             relatorio = salvar_relatorio("ip_publico", "IP público", ip)
-            emit("resultado_comando", {"ok": True, "erro": "", "saida": f"IP público: {ip}\nRelatório: {relatorio.name}"})
+            emit("resultado_comando", {"ok": True, "erro": "", "saida": f"Public IP: {ip}\nReport: {relatorio.name}"})
         elif comando == "loginctl lock-session":
             subprocess.run(["loginctl", "lock-session"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Tela bloqueada"})
+            emit("resultado_comando", {"ok": True, "erro": "Screen locked"})
         elif comando == "hyprctl dispatch lock-screen":
             if not _proc_rodando("hyprlock"):
                 subprocess.Popen(["hyprlock"], start_new_session=True)
             subprocess.run(["hyprctl", "dispatch", "lock-screen"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Tela bloqueada"})
+            emit("resultado_comando", {"ok": True, "erro": "Screen locked"})
         elif comando == "systemctl suspend":
             subprocess.run(["systemctl", "suspend"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Suspend iniciado"})
+            emit("resultado_comando", {"ok": True, "erro": "Suspend started"})
         elif comando == "systemctl poweroff":
             subprocess.run(["systemctl", "poweroff"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Desligando..."})
+            emit("resultado_comando", {"ok": True, "erro": "Shutting down..."})
         elif comando == "systemctl reboot":
             subprocess.run(["systemctl", "reboot"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Reiniciando..."})
+            emit("resultado_comando", {"ok": True, "erro": "Rebooting..."})
         elif comando == "hyprctl reload":
             subprocess.run(["hyprctl", "reload"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "WM recarregado"})
+            emit("resultado_comando", {"ok": True, "erro": "WM reloaded"})
         elif comando == "nmcli radio all off":
             subprocess.run(["nmcli", "radio", "all", "off"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Modo avião ativado"})
+            emit("resultado_comando", {"ok": True, "erro": "Airplane mode enabled"})
         elif comando == "nmcli radio all on":
             subprocess.run(["nmcli", "radio", "all", "on"], timeout=5, check=True)
-            emit("resultado_comando", {"ok": True, "erro": "Rádio ligado"})
+            emit("resultado_comando", {"ok": True, "erro": "Radio enabled"})
         elif comando.startswith("diagnostico_"):
             relatorio, codigo_saida, saida = executar_diagnostico(comando)
             if codigo_saida == 0:
@@ -1070,13 +1452,13 @@ def executar_comando_catalogo(dados):
                 emit("resultado_comando", {"ok": False, "erro": f"Diagnostic exited with code {codigo_saida}. Report: {relatorio}", "saida": saida})
         elif comando == "media_toggle":
             subprocess.run(["playerctl", "play-pause"], timeout=3, check=False)
-            emit("resultado_comando", {"ok": True, "erro": "Play/Pause enviado"})
+            emit("resultado_comando", {"ok": True, "erro": "Play/Pause sent"})
         elif comando == "media_next":
             subprocess.run(["playerctl", "next"], timeout=3, check=False)
-            emit("resultado_comando", {"ok": True, "erro": "Próxima faixa"})
+            emit("resultado_comando", {"ok": True, "erro": "Next track"})
         elif comando == "media_prev":
             subprocess.run(["playerctl", "previous"], timeout=3, check=False)
-            emit("resultado_comando", {"ok": True, "erro": "Faixa anterior"})
+            emit("resultado_comando", {"ok": True, "erro": "Previous track"})
         elif comando == "volume_up":
             subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", "+5%"], timeout=3, check=False)
             emit("resultado_comando", {"ok": True, "erro": "Volume +5%"})
@@ -1084,68 +1466,76 @@ def executar_comando_catalogo(dados):
             subprocess.run(["pactl", "set-sink-volume", "@DEFAULT_SINK@", "-5%"], timeout=3, check=False)
             emit("resultado_comando", {"ok": True, "erro": "Volume -5%"})
         elif comando == "brightness_up":
-            subprocess.run(["brightnessctl", "set", "+10%"], timeout=3, check=False)
-            emit("resultado_comando", {"ok": True, "erro": "Brilho +10%"})
+            antes = _brilho_pct()
+            dev = _dispositivo_backlight()
+            subprocess.run(["brightnessctl", "-d", dev, "set", "+10%"] if dev else ["brightnessctl", "set", "+10%"], timeout=3, check=False)
+            emit("resultado_comando", {"ok": True, "erro": f"Brightness {antes}% -> {_brilho_pct()}%"})
         elif comando == "brightness_down":
-            subprocess.run(["brightnessctl", "set", "10%-"], timeout=3, check=False)
-            emit("resultado_comando", {"ok": True, "erro": "Brilho -10%"})
+            antes = _brilho_pct()
+            dev = _dispositivo_backlight()
+            subprocess.run(["brightnessctl", "-d", dev, "set", "10%-"] if dev else ["brightnessctl", "set", "10%-"], timeout=3, check=False)
+            emit("resultado_comando", {"ok": True, "erro": f"Brightness {antes}% -> {_brilho_pct()}%"})
         elif comando == "night_light_toggle":
-            if _proc_rodando("hyprsunset"):
-                subprocess.run(["pkill", "-x", "hyprsunset"], timeout=3, check=False)
-                socketio.emit("estado_comando", {"comando": comando, "ativo": False})
-                emit("resultado_comando", {"ok": True, "erro": "Luz noturna desligada"})
-            else:
-                try:
-                    subprocess.Popen(["hyprsunset", "-t", "3500"], start_new_session=True)
-                    socketio.emit("estado_comando", {"comando": comando, "ativo": True})
-                    emit("resultado_comando", {"ok": True, "erro": "Luz noturna ligada (3500K)"})
-                except Exception as e:
-                    emit("resultado_comando", {"ok": False, "erro": str(e)})
+            estado = _executar_ii("night_light", not bool(_estado_ii().get("night_light", False)))
+            ativo = bool(estado["night_light"])
+            socketio.emit("estado_comando", {"comando": comando, "ativo": ativo})
+            emit("resultado_comando", {"ok": True, "erro": "Night light ON" if ativo else "Night light OFF"})
         elif comando == "brightness_protection_toggle":
-            marcador = "/tmp/spook_bright_protect"
-            if os.path.exists(marcador):
+            marcador = ARQUIVO_BRIGHT_PROTECT
+            antes = _brilho_pct()
+            if marcador.exists():
                 try:
-                    anterior = open(marcador).read().strip()
-                    subprocess.run(["brightnessctl", "set", anterior], timeout=3, check=False)
+                    anterior = int(open(marcador).read().strip())
                 except Exception:
-                    subprocess.run(["brightnessctl", "set", "50%"], timeout=3, check=False)
+                    anterior = 100
+                if not 5 <= anterior <= 100:
+                    anterior = 100
+                ok = _definir_brilho_pct(anterior)
                 try:
                     os.remove(marcador)
                 except Exception:
                     pass
+                depois = _brilho_pct()
                 socketio.emit("estado_comando", {"comando": comando, "ativo": False})
-                emit("resultado_comando", {"ok": True, "erro": "Proteção de brilho desligada"})
+                emit("resultado_comando", {
+                    "ok": ok,
+                    "erro": f"Brightness restored {antes}% -> {depois}%" if ok else "Could not restore brightness",
+                    "saida": f"{antes}% -> {depois}%",
+                })
             else:
-                r = subprocess.run(["brightnessctl", "-d", "intel_backlight", "get"], capture_output=True, text=True, timeout=3, check=False)
-                try:
-                    with open(marcador, "w") as f:
-                        f.write(r.stdout.strip() or "9600")
-                except Exception:
-                    pass
-                subprocess.run(["brightnessctl", "set", "15%"], timeout=3, check=False)
-                socketio.emit("estado_comando", {"comando": comando, "ativo": True})
-                emit("resultado_comando", {"ok": True, "erro": "Proteção de brilho ligada (15%)"})
+                ok = _definir_brilho_pct(BRILHO_PROTECAO_PCT)
+                if ok:
+                    try:
+                        marcador.parent.mkdir(parents=True, exist_ok=True)
+                        with open(marcador, "w") as f:
+                            f.write(str(antes if antes is not None else 100))
+                    except Exception:
+                        _definir_brilho_pct(antes if antes is not None else 100)
+                        ok = False
+                depois = _brilho_pct()
+                socketio.emit("estado_comando", {"comando": comando, "ativo": ok})
+                emit("resultado_comando", {
+                    "ok": ok,
+                    "erro": f"Brightness locked to {depois}% (was {antes}%)" if ok else "Could not adjust brightness",
+                    "saida": f"{antes}% -> {depois}%",
+                })
         elif comando == "game_mode_toggle":
-            # Hyprland ≥0.55 usa config Lua; `hyprctl keyword` é inválido.
-            atual = _hypr_bool("animations:enabled")
-            alvo_lua = "false" if atual else "true"
-            subprocess.run(
-                ["hyprctl", "eval", f"hl.config({{ animations = {{ enabled = {alvo_lua} }}, decoration = {{ blur = {{ enabled = {alvo_lua} }} }} }})"],
-                timeout=3, check=False,
-            )
-            socketio.emit("estado_comando", {"comando": comando, "ativo": not atual})
-            emit("resultado_comando", {"ok": True, "erro": ("Modo jogo ATIVADO (animações desligadas)" if not atual else "Modo jogo DESATIVADO (animações ligadas)")})
-        elif comando == "warp_toggle":
-            estado = subprocess.run(["warp-cli", "status"], capture_output=True, text=True, timeout=6, check=False).stdout or ""
-            if "Connected" in estado:
-                subprocess.run(["warp-cli", "disconnect"], timeout=6, check=False)
-                socketio.emit("estado_comando", {"comando": comando, "ativo": False})
-                emit("resultado_comando", {"ok": True, "erro": "Cloudflare WARP desligado"})
-            else:
-                subprocess.run(["warp-cli", "connect"], timeout=6, check=False)
-                socketio.emit("estado_comando", {"comando": comando, "ativo": True})
-                emit("resultado_comando", {"ok": True, "erro": "Cloudflare WARP ligado"})
-        elif comando == "notifications_toggle":
+            estado = _executar_ii("game_mode", not bool(_estado_ii().get("game_mode", False)))
+            ativo = bool(estado["game_mode"])
+            socketio.emit("estado_comando", {"comando": comando, "ativo": ativo})
+            emit("resultado_comando", {"ok": True, "erro": "Game Mode ON" if ativo else "Game Mode OFF"})
+        elif comando == "dark_mode_toggle":
+            estado = _executar_ii("dark_mode", not bool(_estado_ii().get("dark_mode", False)))
+            ativo = bool(estado["dark_mode"])
+            socketio.emit("estado_comando", {"comando": comando, "ativo": ativo})
+            emit("resultado_comando", {"ok": True, "erro": "Dark mode ON" if ativo else "Light mode ON"})
+        elif comando == "bluetooth_toggle":
+            atual = _estado_comando(comando)
+            subprocess.run(["bluetoothctl", "power", "off" if atual else "on"], timeout=8, check=True)
+            estado = _estado_comando(comando)
+            socketio.emit("estado_comando", {"comando": comando, "ativo": estado})
+            emit("resultado_comando", {"ok": True, "erro": "Bluetooth ON" if estado else "Bluetooth OFF"})
+        elif comando == "notifications_toggle_legacy":
             # ativo=True = notificações do PC escondidas/silenciadas.
             # daemon real = quickshell "ii" (~/.config/quickshell/ii/services/Notifications.qml),
             # que lê o marcador /tmp/spook_notif_silent e liga Notifications.silent
@@ -1158,7 +1548,7 @@ def executar_comando_catalogo(dados):
                     pass
                 estado = False
                 socketio.emit("estado_comando", {"comando": comando, "ativo": False})
-                emit("resultado_comando", {"ok": True, "erro": "Notificações do PC ativas"})
+                emit("resultado_comando", {"ok": True, "erro": "PC notifications unmuted"})
             else:
                 try:
                     with open(marcador, "w") as f:
@@ -1168,19 +1558,40 @@ def executar_comando_catalogo(dados):
                     return
                 estado = True
                 socketio.emit("estado_comando", {"comando": comando, "ativo": True})
-                emit("resultado_comando", {"ok": True, "erro": "Notificações do PC silenciadas"})
+                emit("resultado_comando", {"ok": True, "erro": "PC notifications muted"})
+        elif comando == "notifications_toggle":
+            estado = _executar_ii("notifications", not bool(_estado_ii().get("notifications_silent", False)))
+            ativo = bool(estado["notifications_silent"])
+            socketio.emit("estado_comando", {"comando": comando, "ativo": ativo})
+            emit("resultado_comando", {"ok": True, "erro": "Notifications muted" if ativo else "Notifications active"})
         elif comando == "remote_input":
-            emit("resultado_comando", {"ok": True, "erro": "Abra a ferramenta na tela de comandos do app"})
+            emit("resultado_comando", {"ok": True, "erro": "Open the tool in the app Commands screen"})
         elif comando == "keep_awake_toggle":
-            ativo_atual = subprocess.run(["systemctl", "--user", "is-active", "keep-awake.service"], capture_output=True, text=True, timeout=5, check=False).stdout.strip() == "active"
-            subprocess.run(["systemctl", "--user", "stop" if ativo_atual else "start", "keep-awake.service"], timeout=5, check=False)
-            estado = subprocess.run(["systemctl", "--user", "is-active", "keep-awake.service"], capture_output=True, text=True, timeout=5, check=False).stdout.strip() == "active"
-            socketio.emit("estado_comando", {"comando": comando, "ativo": estado})
-            emit("resultado_comando", {"ok": True, "erro": ("Manter acordado ATIVO" if estado else "Manter acordado parado")})
+            estado = _executar_ii("keep_awake", not bool(_estado_ii().get("keep_awake", False)))
+            ativo = bool(estado["keep_awake"])
+            socketio.emit("estado_comando", {"comando": comando, "ativo": ativo})
+            emit("resultado_comando", {"ok": True, "erro": "Keep Awake ON" if ativo else "Keep Awake OFF"})
         else:
-            emit("resultado_comando", {"ok": False, "erro": f"Comando não implementado: {comando}"})
+            emit("resultado_comando", {"ok": False, "erro": f"Command not implemented: {comando}"})
     except Exception as e:
         emit("resultado_comando", {"ok": False, "erro": str(e)})
+
+
+def _ydotool_rodavel():
+    """ydotool so funciona com o daemon ydotoald (uinput, root).
+
+    Sem o socket ele NAO dá erro: Sai com rc=0 e nao faz nada — por isso o
+    touchpad/teclado "nao mexiam" e nao parecia bug. Aqui avisamos de vez.
+    """
+    if os.path.exists("/tmp/.ydotool_socket"):
+        return True
+    if not getattr(_ydotool_rodavel, "_avisou", False):
+        _ydotool_rodavel._avisou = True
+        msg = ("ydotool SEM ydotoald: inicie com "
+               "'sudo systemctl enable --now ydotoald' (uinput/root)")
+        print(f"[PC_TECLADO] {msg}", flush=True)
+        emit("resultado_comando", {"ok": False, "erro": msg})
+    return False
 
 
 @socketio.on("pc_teclado")
@@ -1191,6 +1602,8 @@ def pc_teclado(dados):
             texto = dados.get("texto", "")
             if texto:
                 subprocess.run(["wtype", texto], timeout=5, check=False)
+        elif not _ydotool_rodavel():
+            return
         elif tipo == "backspace":
             subprocess.run(["ydotool", "key", "14:1", "14:0"], timeout=3, check=False)
         elif tipo == "enter":
@@ -1209,6 +1622,8 @@ def pc_touchpad(dados):
         return
     try:
         tipo = dados.get("tipo", "")
+        if tipo != "move" and not _ydotool_rodavel():
+            return
         if tipo == "move":
             dx = dados.get("dx", 0)
             dy = dados.get("dy", 0)
@@ -1223,6 +1638,38 @@ def pc_touchpad(dados):
                 subprocess.run(["ydotool", "mousemove", "-w", "0", str(dy)], timeout=3, check=False)
     except Exception as e:
         emit("resultado_comando", {"ok": False, "erro": str(e)})
+
+
+@socketio.on("iniciar_terminal")
+def _iniciar_terminal(dados=None):
+    """Aba TERMINAL do app: um bash no Arch com stdout via 'saida_terminal'."""
+    global sessao_pty
+    if sessao_pty.get("fd") is None:
+        try:
+            _detectar_env_hypr()
+            os.environ["TERM"] = "xterm-256color"
+            iniciar_sessao_pty()
+        except Exception as e:
+            print(f"[TERMINAL] nao iniciou: {e}", flush=True)
+            emit("terminal_erro", {"erro": str(e)})
+            return
+    emit("terminal_pronto", {})
+    socketio.emit("saida_terminal", {"dados": "\x1b[2mshell do Arch pronta — digite abaixo e ENTER\x1b[0m\n"})
+
+
+@socketio.on("entrada_terminal")
+def _entrada_terminal(dados):
+    fd = sessao_pty.get("fd")
+    if fd is None:
+        emit("terminal_erro", {"erro": "terminal nao iniciado — abra a aba TERMINAL"})
+        return
+    texto = str((dados or {}).get("dados", ""))
+    if not texto:
+        return
+    try:
+        os.write(fd, (texto if texto.endswith("\n") else texto + "\n").encode())
+    except OSError as e:
+        emit("terminal_erro", {"erro": f"terminal caiu: {e}"})
 
 
 def iniciar_sessao_pty():
@@ -1288,6 +1735,57 @@ def iniciar_relay_bridge():
     @sio.on("task_apagada")
     def on_task_apagada(dados):
         socketio.emit("task_apagada", dados)
+    @sio.on("ia_executar_scan")
+    def on_ia_executar_scan(dados):
+        try:
+            scan = (dados or {}).get("scan", "")
+            alvo = (dados or {}).get("alvo", "")
+            portas = (dados or {}).get("portas", "")
+            sessao_id = (dados or {}).get("sessao_id", "")
+            pergunta_original = (dados or {}).get("pergunta_original", "")
+            print(f"[BRIDGE IA] scan={scan} alvo={alvo}", flush=True)
+            resultado = executar_scan_ia(scan, alvo, portas)
+            if sio.connected:
+                sio.emit("ia_executar_scan", {"sessao_id": sessao_id, "resultado": resultado, "pergunta_original": pergunta_original})
+            else:
+                print("[BRIDGE IA] relay desconectado, resultado descartado", flush=True)
+        except Exception as e:
+            print(f"[BRIDGE IA ERRO] ia_executar_scan: {e}", flush=True)
+            try:
+                if sio.connected:
+                    sio.emit("ia_executar_scan", {"sessao_id": (dados or {}).get("sessao_id", ""), "resultado": {"ok": False, "erro": str(e)}, "pergunta_original": (dados or {}).get("pergunta_original", "")})
+            except Exception:
+                pass
+    @sio.on("ia_executar_comando")
+    def on_ia_executar_comando(dados):
+        try:
+            comando = (dados or {}).get("comando", "")
+            sessao_id = (dados or {}).get("sessao_id", "")
+            pergunta_original = (dados or {}).get("pergunta_original", "")
+            print(f"[BRIDGE IA] comando={comando}", flush=True)
+            resultado = executar_comando_ia(comando)
+            if sio.connected:
+                sio.emit("ia_executar_comando", {"sessao_id": sessao_id, "resultado": resultado, "pergunta_original": pergunta_original})
+        except Exception as e:
+            print(f"[BRIDGE IA ERRO] ia_executar_comando: {e}", flush=True)
+            try:
+                if sio.connected:
+                    sio.emit("ia_executar_comando", {"sessao_id": (dados or {}).get("sessao_id", ""), "resultado": {"ok": False, "erro": str(e)}, "pergunta_original": (dados or {}).get("pergunta_original", "")})
+            except Exception:
+                pass
+    @sio.on("ia_obter_info")
+    def on_ia_obter_info(dados):
+        try:
+            sessao_id = (dados or {}).get("sessao_id", "")
+            pergunta_original = (dados or {}).get("pergunta_original", "")
+            print(f"[BRIDGE IA] obter_info solic (sessao={sessao_id})", flush=True)
+            info = coletar_info_servidor()
+            info.update(coletar_info_celular())
+            resultado = info
+            if sio.connected:
+                sio.emit("ia_obter_info", {"sessao_id": sessao_id, "resultado": resultado, "pergunta_original": pergunta_original})
+        except Exception as e:
+            print(f"[BRIDGE IA ERRO] ia_obter_info: {e}", flush=True)
     def run_bridge():
         while True:
             try:
@@ -1321,6 +1819,10 @@ def iniciar_bluetooth_thread():
     threading.Thread(target=run_bt, daemon=True).start()
 
 
+@app.route("/healthz")
+def healthz():
+    return "OK", 200
+
 if __name__ == "__main__":
     _detectar_env_hypr()
     if not MODO_CLOUD:
@@ -1329,7 +1831,9 @@ if __name__ == "__main__":
         threading.Thread(target=monitorar_chat, daemon=True).start()
         threading.Thread(target=monitorar_tasks, daemon=True).start()
         threading.Thread(target=_monitorar_notificacoes, daemon=True).start()
+        threading.Thread(target=_loop_localizacao_arch, daemon=True).start()
         iniciar_relay_bridge()
         iniciar_bluetooth_thread()
     print("[HTTP] Servidor HTTP na porta 5000", flush=True)
     socketio.run(app, host="0.0.0.0", port=5000, allow_unsafe_werkzeug=True, use_reloader=False)
+

@@ -7,7 +7,10 @@ __pycache__/
 compartilhados/
 recebidos/
 relatorios/
-relatorios/
 chave_publica_celular.pem
 resultados_scan.txt
 notificacoes.jsonl
+*.bak
+*.bak*
+localizacao.json
+patch_*.py

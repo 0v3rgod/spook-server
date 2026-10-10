@@ -132,6 +132,13 @@ def _flush_pending():
     finally:
         fcntl.flock(fd, fcntl.LOCK_UN)
         fd.close()
+    # lapide sempre vence: nao sobe msg apagada que sobrou no outbox
+    _tombs_carregar()
+    descartados = [m for m in _PENDING if m in _TOMBS]
+    if descartados:
+        for m in descartados:
+            _PENDING.pop(m, None)
+        _salvar_pending()
     for mid in [m for m in _PENDING.copy()]:
         fdu = _upload_lock()
         try:
@@ -189,8 +196,11 @@ def _aaplica_pendentes_locais():
     finally:
         fcntl.flock(fd, fcntl.LOCK_UN)
         fd.close()
+    _tombs_carregar()
     for item in _PENDING.values():
         msg = {k: v for k, v in item.items() if not k.startswith("_")}
+        if msg.get("id") in _TOMBS:
+            continue  # lapidada: nao ressuscita no espelho local
         _gravar_local(msg)
 
 
@@ -200,8 +210,14 @@ def _sync_chat():
         if fd is None:
             return False  # outro processo ja esta sincronizando
         try:
+            _sync_tombs()   # lapides primeiro: impede ressurreicao
             _flush_pending()
             _run(["sync", "--fast-list", "--update", _base(CHAT), str(_CHAT_DIR)], check=False, timeout=300)
+            try:
+                if _tombs_confere_locais():
+                    _tombs_publica_bruto()   # lapide nao gruda no Drive: corrige o registro
+            except Exception:
+                pass
             # o sync poda local-exclusivos; pinamos os nossos de volta p/ nao sumir
             _aaplica_pendentes_locais()
             _CHAT_VERSION[0] += 1
@@ -229,6 +245,241 @@ def _sync_tasks():
             return False
         finally:
             _release_sync_lock(fd)
+
+
+# ---------------------------------------------------------------------------
+# LAPIDES DE MENSAGEM APAGADA (portado do relay em 05/10/2026)
+# `rclone sync` e BIDIRECIONAL: se a maquina A apaga uma mensagem e a maquina B
+# ainda tem o arquivo no espelho local, o proximo sync da B RE-SOBE o arquivo e a
+# mensagem volta (bug "apaguei e reapareceu" / "num aparelho sim, no outro
+# nao"). A lapide e um registro unico no Drive (fonte da verdade) que todas as
+# maquinas respeitam: antes de sincronizar, cada uma remove do espelho local
+# todo id lapidado -> nunca mais sobe. Nunca usar `purge` aqui.
+_TOMBS_REMOTE = "_apagados_chat.json"
+_TOMB_CACHE = Path(os.environ.get("SPOOK_TOMB_CACHE", "/tmp/spook_chat_apagados.json"))
+_TOMB_MAX_IDS = 4000
+_TOMBS = {}          # {id: epoch do registro}
+_TOMBS_VISTO = {}     # {id: ciclo de sync em que a lapide foi vista}
+_CICLO = [0]         # contador de ciclos de sync (evita depender do relogio)
+_TOMB_PUB_OK = [None]   # ultima versao publicada no Drive
+
+
+def _tombs_carregar():
+    global _TOMBS
+    try:
+        d = json.loads(_TOMB_CACHE.read_text())
+        if isinstance(d, dict):
+            _TOMBS = {str(k): float(v) for k, v in d.items()}
+    except Exception:
+        pass
+    return _TOMBS
+
+
+def _tombs_salvar():
+    global _TOMBS
+    if len(_TOMBS) > _TOMB_MAX_IDS:
+        _TOMBS = dict(sorted(_TOMBS.items(), key=lambda kv: kv[1])[-_TOMB_MAX_IDS:])
+    try:
+        _TOMB_CACHE.write_text(json.dumps(_TOMBS))
+    except Exception:
+        pass
+
+
+def marcar_apagado(msg_id):
+    """Lapida a mensagem: cache local (sincrono) + Drive (background)."""
+    try:
+        _tombs_carregar()
+        _TOMBS[str(msg_id)] = time.time()
+        _tombs_salvar()
+    except Exception:
+        return
+    try:
+        _bg(_tombs_publicar)
+    except Exception:
+        pass
+
+
+def _parse_tombs(txt):
+    """Le o registro de lapides aceitando VARIOS objetos JSON concatenados.
+
+    Duas maquinas gravando ao mesmo tempo podem deixar o objeto no Drive como
+    "{...}{...}" (o json.loads normal quebra com 'Extra data' e a gente perderia
+    a leitura inteira). Aqui parseamos objeto por objeto e unimos tudo."""
+    out = {}
+    dec = json.JSONDecoder()
+    s = (txt or "").strip()
+    i = 0
+    while i < len(s):
+        while i < len(s) and s[i] in " \r\n\t,":
+            i += 1
+        if i >= len(s):
+            break
+        try:
+            obj, j = dec.raw_decode(s, i)
+        except Exception:
+            break
+        i = j
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                try:
+                    out[str(k)] = float(v)
+                except Exception:
+                    pass
+    return out
+
+
+def _tombs_puxar():
+    """Une as lapides do Drive no cache local."""
+    _tombs_carregar()
+    remoto = {}
+    sujo = False
+    try:
+        p = _run(["cat", _base(_TOMBS_REMOTE)], check=False, timeout=60)
+        if p.returncode == 0:
+            txt = p.stdout.decode("utf-8", "replace")
+            remoto = _parse_tombs(txt)
+            t = txt.strip()
+            if t and not t.endswith("}"):
+                sujo = True  # objeto truncado/concatenado no Drive = precisa regravar
+    except Exception:
+        return False
+    mudou = sujo
+    for k, v in remoto.items():
+        if v > _TOMBS.get(k, 0):
+            _TOMBS[k] = v
+            mudou = True
+    for k in _TOMBS:
+        if k not in remoto:
+            mudou = True
+    if mudou:
+        _tombs_salvar()
+    return mudou
+
+
+def _tombs_publicar():
+    """Le do Drive, une e regrava (last-writer-wins sem perder lapide de ninguem)."""
+    _tombs_puxar()
+    if _TOMBS != _TOMB_PUB_OK[0]:
+        _tombs_publica_bruto()
+
+
+def _tombs_purgar_locais():
+    """Tira do espelho local todo id lapidado ANTES do sync, e garante que o id
+    lapidado NAO existe mais no Drive (a lapide SEMPRE vence quem tentou
+    re-sober). O sync so faz download: sem o arquivo no Drive ele nunca volta
+    pro espelho."""
+    if not _TOMBS:
+        return 0
+    n = 0
+    for mid in list(_TOMBS):
+        try:
+            f = _CHAT_DIR / f"{mid}.json"
+            if f.exists():
+                f.unlink()
+                n += 1
+        except Exception:
+            pass
+    try:
+        p = _run(["lsjson", _base(CHAT), "--files-only"], check=False, timeout=120)
+        if p.returncode != 0:
+            return n
+        vivos = json.loads(p.stdout.decode("utf-8", "replace") or "[]")
+    except Exception:
+        return n
+    for it in vivos:
+        nome = it.get("Name") or ""
+        if not nome.endswith(".json"):
+            continue
+        mid = nome[:-5]
+        if mid in _TOMBS:
+            try:
+                _run(["deletefile", f"{_base(CHAT)}/{mid}.json"], check=False, timeout=120)
+                n += 1
+            except Exception:
+                pass
+    return n
+
+
+def _tombs_confere_locais():
+    """RODADA DEPOIS do sync. So descarta lapide se o arquivo no espelho for de
+    mensagem CRIADA DEPOIS da lapide (id re-usado de verdade). Mensagem antiga
+    que "voltou" e ressureicao: a lapide continua e o proximo _tombs_purgar_locais
+    a tira de novo do Drive."""
+    if not _TOMBS or not _CHAT_DIR.exists():
+        return 0
+    n = 0
+    for k in list(_TOMBS):
+        try:
+            f = _CHAT_DIR / f"{k}.json"
+            if not f.exists():
+                continue
+            msg = json.loads(f.read_text())
+            ts_ms = msg.get("ts")
+            if not isinstance(ts_ms, (int, float)):
+                continue
+            if ts_ms / 1000.0 > _TOMBS.get(k, 0) + 5:
+                _TOMBS.pop(k, None)
+                _TOMBS_VISTO.pop(k, None)
+                n += 1
+        except Exception:
+            continue
+    if n:
+        _tombs_salvar()
+    return n
+
+
+def _tombs_publica_bruto():
+    try:
+        _run(["copyto", str(_TOMB_CACHE), _base(_TOMBS_REMOTE)], check=False, timeout=120)
+        _TOMB_PUB_OK[0] = dict(_TOMBS)
+    except Exception:
+        return
+    _tombs_dedupe()
+
+
+def _tombs_dedupe():
+    """O Drive ACEITA nomes duplicados. Se as duas maquinas gravam o registro no
+    mesmo instante, o `copyto` cria mais um -> o `cat` concatena e o registro vira
+    lixo (json quebrado, lapide perdida). Mantem a mais nova."""
+    try:
+        p = _run(["lsjson", REMOTE, "--files-only", "--include", "/" + _TOMBS_REMOTE], check=False, timeout=120)
+        if p.returncode != 0:
+            return
+        if len(json.loads(p.stdout.decode() or "[]")) <= 1:
+            return
+        _run(["dedupe", REMOTE, "--include", "/" + _TOMBS_REMOTE, "--dedupe-mode", "newest"], check=False, timeout=300)
+    except Exception:
+        pass
+
+
+def _sync_tombs():
+    """Antes do sync: lapides que o outro lado nao sabe ainda. Depois do sync,
+    o chamador roda _tombs_confere_locais() para lapide que nao grudou.
+    Tudo dentro de try: a lapide e uma protecao, nunca pode derrubar o sync."""
+    try:
+        _tombs_puxar()
+        _CICLO[0] += 1
+        return _tombs_purgar_locais()
+    except Exception:
+        return 0
+
+
+def _tombs_filtrar(msgs):
+    """Rede de seguranca da leitura: nunca mostra msg cujo id esta lapidado
+    (a janela entre o sync e o purge). Id re-usado de verdade (ts mais novo que a
+    lapide) passa."""
+    if not _TOMBS:
+        return msgs
+    out = []
+    for m in msgs:
+        mid = str(m.get("id") or "")
+        tomb = _TOMBS.get(mid)
+        if tomb is not None:
+            ts = m.get("ts")
+            if not isinstance(ts, (int, float)) or ts / 1000.0 <= tomb + 5:
+                continue
+        out.append(m)
+    return out
 
 
 def _start_refresher():
@@ -501,10 +752,14 @@ def _upload_arquivo(p, destino, msg):
 def listar_mensagens():
     # Leitura instantanea do espelho local. O sync fica a cargo da thread de
     # background; o sincronismo inicial aconteceu no _start_refresher().
-    return _ler_chat_local()
+    _tombs_carregar()
+    return _tombs_filtrar(_ler_chat_local())
 
 
 def apagar_mensagem(msg_id):
+    # lapide ANTES de tudo: e o registro que o outro lado respeita
+    _tombs_carregar()
+    marcar_apagado(msg_id)
     # local-first: remove do espelho ja; deletefile roda em background
     _delete_local(msg_id)
     fd = _pend_lock()

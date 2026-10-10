@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <title>spook://mirror</title>
+
+    <!--
+    noVNC 1.7 (MPL 2.0) adaptado para o WebView do Spook.
+
+    Diferencas em relacao ao vnc_lite.html do noVNC:
+      * no <script type="module">: the import is dynamic inside a classic script
+        and carries the URL "v=" so the cache can never serve a stale core/rfb.js
+        (websockify's file server answers 304 without checking the mtime, and the
+        dead module opened no WebSocket at all, silently).
+      * every state (connecting/connected/reconnecting/error) goes to the app via
+        window.__estadoMirror, since the WebView drops console.log.
+      * keys: window.SpookKeys.tap(keysym) injects keys into the RFB.
+      * no top bar: the app itself shows the state and the buttons.
+      * readQueryVariable returns text and "false" is truthy in JS: without a real
+        boolean noVNC went read-only and rfb.js:1215 dropped every mouse event.
+    -->
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            background-color: #05070A;
+            overflow: hidden;
+            /* Sem isso o WebView trata o toque como gesto de scroll e o evento
+               nunca chega no canvas: o teclado funcionava, o mouse nao. */
+            touch-action: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        #top_bar { display: none; }
+        #screen {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas { display: block; }
+    </style>
+</head>
+
+<body>
+    <div id="top_bar">
+        <div id="status">Loading</div>
+    </div>
+    <div id="screen"></div>
+
+    <script>
+    (async function () {
+        // ---- ponte de estado para o app -------------------------------------
+        // Idempotente: o app so precisa de mudanca de estado. Sem isso, um laco de
+        // reconexao do noVNC despejava milhoes de chamadas na ponte JS->Kotlin.
+        let ultimo = null;
+        function report(estado) {
+            if (estado === ultimo) return;
+            ultimo = estado;
+            try { document.getElementById('status').textContent = estado; } catch (e) {}
+            // O app le isto por polling (evaluateJavascript): sem ponte JS->Kotlin,
+            // que gerava recursao e milhares de callbacks por segundo.
+            try { window.__estadoMirror = estado; } catch (e) {}
+        }
+        // Tap the screen = focus the document, so the system keyboard shows up
+        // and the keys reach noVNC (the app has no text field).
+        document.addEventListener('touchstart', function () {
+            try { document.body.setAttribute('tabindex', '-1'); document.body.focus(); } catch (e) {}
+            try { window.focus(); } catch (e) {}
+        }, true);
+        document.addEventListener('click', function () {
+            try { window.focus(); } catch (e) {}
+        }, true);
+        window.addEventListener('error', function (ev) {
+            report('error: ' + (ev.message || 'unknown error'));
+        });
+        window.addEventListener('unhandledrejection', function (ev) {
+            report('error: ' + ((ev.reason && ev.reason.message) || ev.reason || 'promise'));
+        });
+
+        function readQueryVariable(name, padrao) {
+            const re = new RegExp('.*[?&]' + name + '=([^&#]*)');
+            const m = document.location.href.match(re);
+            return m ? decodeURIComponent(m[1]) : padrao;
+        }
+        // texto -> boolean de verdade ("false" e truthy em JS)
+        function boolQuery(name, padrao) {
+            const v = readQueryVariable(name, null);
+            if (v === null) return padrao;
+            return v === true || v === 'true' || v === '1' || v === 'yes';
+        }
+
+        // ---- noVNC ---------------------------------------------------------
+        const versao = readQueryVariable('v', '0');
+        let RFB;
+        const carregando = import('./core/rfb.js?v=' + encodeURIComponent(versao))
+            .then(function (m) { return m.default; });
+        // Se o import travar (cache ruim, rede morta), avisa em vez de ficar mudo.
+        const chrono = setTimeout(function () {
+            report('error: rfb.js import timed out');
+        }, 8000);
+        try {
+            RFB = await carregando;
+        } catch (e) {
+            clearTimeout(chrono);
+            report('error: rfb.js import failed (' + (e && e.message ? e.message : e) + ')');
+            return;
+        }
+        clearTimeout(chrono);
+
+        const password = readQueryVariable('password');
+        const path = readQueryVariable('path', 'websockify');
+        const protocolo = (window.location.protocol === "https:") ? 'wss:' : 'ws:';
+        const url = new URL(path, location.href);
+        url.protocol = protocolo;
+
+        let rfb = null;
+        let tentativas = 0;
+
+        let conectando = false;
+        function conecta() {
+            if (conectando) return;
+            conectando = true;
+            report("connecting");
+            const tela = document.getElementById('screen');
+            tela.innerHTML = '';
+            try {
+                rfb = new RFB(tela, url.href, { credentials: { password: password } });
+                rfb.addEventListener("connect", function () { conectando = false; });
+                rfb.addEventListener("disconnect", function () { conectando = false; });
+            } catch (e) {
+                conectando = false;
+                report('error: ' + (e && e.message ? e.message : e));
+                setTimeout(conecta, 3000);
+                return;
+            }
+            // App key bar: sendKey(keysym, down) is noVNC's own path.
+            window.SpookKeys = {
+                tap: function (code) {
+                    if (!rfb || rfb.viewOnly) return false;
+                    rfb.sendKey(code, true);
+                    rfb.sendKey(code, false);
+                    return true;
+                }
+            };
+            rfb.addEventListener("connect", function () {
+                tentativas = 0;
+                report("connected");
+            });
+            rfb.addEventListener("disconnect", function () {
+                // notebook asleep, hyprlock, wifi dropped: retry with backoff.
+                tentativas += 1;
+                report("reconnecting");
+                setTimeout(conecta, Math.min(1000 * tentativas, 8000));
+            });
+            rfb.addEventListener("credentialsrequired", function () {
+                rfb.sendCredentials({ password: prompt("VNC password:") || "" });
+            });
+            rfb.viewOnly = boolQuery('view_only', false);
+            rfb.scaleViewport = boolQuery('scale', false);
+            rfb.quality = Math.min(parseInt(readQueryVariable('quality', '9'), 10) || 9, 9);
+            rfb.compressionLevel = parseInt(readQueryVariable('compression', '0'), 10) || 0;
+
+        }
+
+        conecta();
+    })().catch(function (e) {
+        try { window.__estadoMirror = 'error: ' + (e && e.message ? e.message : e); } catch (x) {}
+    });
+    </script>
+</body>
+</html>

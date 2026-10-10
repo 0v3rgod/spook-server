@@ -7,6 +7,7 @@ import re
 import subprocess
 import tempfile
 import urllib.request
+from pathlib import Path
 
 LOCALIZACAO_FILE = "localizacao.json"
 REMOTE = "gdrive:SPOOK"
@@ -15,23 +16,45 @@ MAPA_TEMPLATE = "https://www.google.com/maps?q={lat},{lon}"
 LOCK_FILE = "/tmp/spook_localizacao.lock"
 
 
+LOCAL_FILE = str(Path.home() / "pentestlink-servidor" / LOCALIZACAO_FILE)
+
+
+def _ler_local():
+    try:
+        with open(LOCAL_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def _ler():
+    """Drive primeiro, arquivo local como fallback.
+
+    O rclone depende do token do gdrive: se ele cair (invalid_grant), a
+    localizacao do Arch sumia do app mesmo com o JSON valido em disco.
+    """
+    dados = {}
     try:
         p = subprocess.run(
             ["rclone", "cat", f"{REMOTE}/{LOCALIZACAO_FILE}"],
             capture_output=True, timeout=60,
         )
-        if p.returncode != 0:
-            return {}
-        bruto = p.stdout.decode("utf-8", errors="replace") or "{}"
-        try:
-            return json.loads(bruto)
-        except Exception:
-            # O antigo rclone rcat enfileirava escritas no MESMO arquivo,
-            # deixando 2+ JSONs concatenados. Recupera o último objeto válido.
-            return _ultimo_objeto_valido(bruto) or {}
+        if p.returncode == 0:
+            bruto = p.stdout.decode("utf-8", errors="replace") or "{}"
+            try:
+                dados = json.loads(bruto)
+            except Exception:
+                # O antigo rclone rcat enfileirava escritas no MESMO arquivo,
+                # deixando 2+ JSONs concatenados. Recupera o ultimo objeto valido.
+                dados = _ultimo_objeto_valido(bruto) or {}
     except Exception:
-        return {}
+        dados = {}
+    local = _ler_local()
+    # une: o que vier no local completa o que faltar no Drive (e vice-versa)
+    for chave, valor in local.items():
+        if valor or not dados.get(chave):
+            dados[chave] = valor
+    return dados
 
 
 def _ultimo_objeto_valido(bruto):
@@ -74,6 +97,14 @@ def _escrever(dados):
     try:
         fcntl.flock(lock_fd, fcntl.LOCK_EX)
         bloco = json.dumps(dados, ensure_ascii=False)
+        # local SEMPRE (fonte de verdade do app); o Drive e backup p/ outras maquinas
+        try:
+            tmp_local = LOCAL_FILE + ".tmp"
+            with open(tmp_local, "w", encoding="utf-8") as f:
+                f.write(bloco)
+            os.replace(tmp_local, LOCAL_FILE)
+        except Exception:
+            pass
         fd, temp = tempfile.mkstemp(dir="/tmp", suffix=".json")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:

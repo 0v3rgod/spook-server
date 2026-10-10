@@ -26,7 +26,9 @@ BATERIA_CELULAR = Path("/tmp/bateria_celular.txt")
 CELULAR_STATUS = Path("/tmp/celular_status.json")
 CELULAR_STATUS_PY = BASE / "celular_status.py"
 API_BASE = "http://127.0.0.1:5000"
-SOCKET_URL = "http://100.70.88.101:5000"
+# Hub unico: o RELAY da Oracle (o Redmi 100.79.55.68 foi desativado em 16/09).
+HUB_URL = "http://100.70.88.101:5000"
+SOCKET_URL = HUB_URL
 MIDIA_OVERLAY_DIR = Path("/tmp/spook_media_overlay")
 ICON_ROUND = Path.home() / ".local/share/icons/spook_round.png"
 
@@ -36,65 +38,120 @@ AI_URL = "http://100.70.88.101:5000/ia"
 
 CSS = """
 window.spook { background: #0B0A12; color: #F4F1FF; }
-.spook-root { background: #0B0A12; padding: 10px; }
+.spook-root { background: #0B0A12; padding: 16px; }
 .spook-title { font-size: 15px; font-weight: 700; color: #FF4D9A; }
 .spook-sub { font-size: 11px; color: #B8B4C8; }
-.spook-card { background: #16141F; border-radius: 12px; border: 1px solid #2A2736; padding: 10px; }
-.spook-rich-card { background: #16141F; border-radius: 12px; border: 1px solid #2A2736; padding: 12px; }
+.spook-status {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 11px; font-weight: 700;
+}
+.spook-card {
+  background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
+  padding: 14px 16px;
+}
+.spook-rich-card {
+  background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
+  padding: 16px 18px;
+}
 .spook-metric-ico { font-size: 15px; color: #5CE1E6; }
 .spook-msi {
   font-family: "Material Symbols Rounded";
-  font-size: 18px;
-  background-color: #0B0A12;
-  border-radius: 6px;
-  padding: 3px;
-  min-width: 22px;
-  min-height: 22px;
+  font-size: 16px;
+  background-color: #1E1C2A;
+  border: 1px solid #2A2736;
+  border-radius: 20px; padding: 4px;
+  min-width: 24px; min-height: 24px;
 }
 .spook-card-title { font-size: 11px; font-weight: 700; color: #5CE1E6; }
-.spook-card-android { border: 1px solid #FF4D9A; }
-.spook-card-arch { border: 1px solid #5CE1E6; }
-.spook-card-android .spook-msi { color: #FF4D9A; }
-.spook-card-arch .spook-msi { color: #5CE1E6; }
+.spook-card-android { border: 1px solid #3A3648; }
+.spook-card-arch { border: 1px solid #3A3648; }
+.spook-card-android .spook-msi {
+  color: #FF4D9A; background-color: rgba(255, 77, 154, 0.14);
+  border-color: rgba(255, 77, 154, 0.35);
+}
+.spook-card-arch .spook-msi {
+  color: #5CE1E6; background-color: rgba(92, 225, 230, 0.12);
+  border-color: rgba(92, 225, 230, 0.32);
+}
+.spook-msi-android {
+  color: #FF4D9A; background-color: rgba(255, 77, 154, 0.14);
+  border-color: rgba(255, 77, 154, 0.32);
+}
+.spook-card-android .spook-msi.spook-msi-arch {
+  color: #5CE1E6; background-color: rgba(92, 225, 230, 0.12);
+  border-color: rgba(92, 225, 230, 0.32);
+}
 .spook-ok { color: #5CE1E6; }
 .spook-warn { color: #FF7A45; }
 .spook-err { color: #FF5C6C; }
 .spook-metric { font-size: 12px; color: #F4F1FF; }
 .spook-note { font-size: 11px; color: #B8B4C8; }
 .spook-loc { font-size: 13px; color: #F4F1FF; }
-.spook-msg-arch { background: #16141F; border: 1px solid #5CE1E6; border-radius: 18px; padding: 12px 14px; margin: 4px 0; }
-.spook-msg-phone { background: #321528; border: 1px solid #FF4D9A; border-radius: 18px; padding: 12px 14px; margin: 4px 0; }
-.spook-msg-h { font-size: 11px; }
+.spook-msg-arch {
+  background: #16141F; border: 1px solid rgba(92, 225, 230, 0.45);
+  border-radius: 20px; padding: 12px 16px; margin: 4px 0;
+}
+.spook-msg-phone {
+  background: #211726; border: 1px solid rgba(255, 77, 154, 0.5);
+  border-radius: 20px; padding: 12px 16px; margin: 4px 0;
+}
+.spook-msg-h { font-size: 10px; font-weight: 700; }
 .spook-msg-h-arch { color: #5CE1E6; }
 .spook-msg-h-phone { color: #FF4D9A; }
-.spook-msg-txt { font-size: 17px; color: #FFFFFF; font-weight: 600; }
+.spook-msg-txt { font-size: 16px; color: #FFFFFF; font-weight: 600; }
+.spook-msg-txt.spook-tarefa-feita {
+  text-decoration: line-through; color: #8A8F98; font-weight: 500;
+}
 button.spook-btn {
-  background: #1E1C2A; color: #F4F1FF; border-radius: 8px;
-  border: 1px solid #3A3648; padding: 5px 9px; font-size: 11px;
+  background: #1E1C2A; color: #F4F1FF; border-radius: 22px;
+  border: 1px solid #3A3648; padding: 6px 14px; font-size: 11px;
+  transition: all 140ms ease;
 }
-button.spook-btn:hover { background: #2A2736; }
-button.spook-accent { background: #FF4D9A; color: #0B0A12; border: none; }
-button.spook-ok-btn { background: #5CE1E6; color: #0B0A12; border: none; }
-button.spook-warn-btn { background: #FF7A45; color: #0B0A12; border: none; }
-button.spook-err-btn { background: #FF5C6C; color: #0B0A12; border: none; }
-button.spook-tab { background: #16141F; color: #F4F1FF; border-radius: 10px 10px 0 0; border: 1px solid #2A2736; padding: 5px 9px; font-size: 11px; }
-button.spook-tab-on { background: #FF4D9A; color: #0B0A12; border: 1px solid #FF4D9A; border-radius: 10px 10px 0 0; padding: 5px 9px; font-size: 11px; }
+button.spook-btn:hover { background: #2A2736; border-color: #6E6A81; }
+button.spook-btn:active { background: #16141F; }
+button.spook-btn:focus { outline: 2px solid #FF4D9A; outline-offset: 2px; }
+button.spook-accent {
+  background: #FF4D9A; color: #0B0A12; border: none; font-weight: 700;
+  transition: all 140ms ease;
+}
+button.spook-accent:hover { background: #FF6BA8; box-shadow: 0 0 14px 0 rgba(255, 77, 154, 0.45); }
+button.spook-ok-btn { background: #5CE1E6; color: #0B0A12; border: none; font-weight: 700; }
+button.spook-warn-btn { background: #FF7A45; color: #0B0A12; border: none; font-weight: 700; }
+button.spook-err-btn { background: #FF5C6C; color: #0B0A12; border: none; font-weight: 700; }
+button.spook-tab {
+  background: transparent; color: #B8B4C8; padding: 8px 18px;
+  font-size: 11px; font-weight: 700; border: none; border-radius: 0;
+  transition: all 150ms ease;
+}
+button.spook-tab-on {
+  background: transparent; color: #FF4D9A; padding: 8px 18px;
+  font-size: 11px; font-weight: 700; border: none; border-radius: 0;
+  border-bottom: 2px solid #FF4D9A;
+}
 .spook-input {
-  background: #16141F; color: #F4F1FF; border: 1px solid #6E6A81;
-  border-radius: 18px; padding: 8px 12px; font-size: 14px;
+  background: #16141F; color: #F4F1FF; border: 1px solid #3A3648;
+  border-radius: 22px; padding: 9px 16px; font-size: 13px;
+  transition: all 140ms ease;
 }
-.spook-input:focus { border-color: #FF4D9A; }
+.spook-input:focus {
+  border-color: #FF4D9A; box-shadow: 0 0 0 3px rgba(255, 77, 154, 0.15);
+}
 .spook-scan-card {
-  background: #16141F; border-radius: 10px; border: 1px solid #5CE1E6;
-  padding: 8px 10px;
+  background: #16141F; border-radius: 18px; border: 1px solid #3A3648;
+  padding: 10px 12px; transition: all 140ms ease;
 }
 .spook-scan-card:hover { background: #1E1C2A; border-color: #FF4D9A; }
-.spook-scan-section { font-family: "Press Start 2P"; font-size: 9px; color: #5CE1E6; padding: 8px 0 4px 0; }
-.spook-cmd-card {
-  background: #16141F; border-radius: 10px; border: 1px solid #5CE1E6;
-  padding: 8px; min-width: 100px; min-height: 70px;
+.spook-scan-section {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 10px; font-weight: 700; color: #5CE1E6;
+  padding: 10px 0 6px 0;
 }
-.spook-cmd-card:hover { border-color: #FF4D9A; }
+.spook-cmd-card {
+  background: #16141F; border-radius: 18px; border: 1px solid #3A3648;
+  padding: 10px; min-width: 100px; min-height: 70px;
+  transition: all 140ms ease;
+}
+.spook-cmd-card:hover { border-color: #FF4D9A; background: #1E1C2A; }
 .spook-msi-btn {
   font-family: "Material Symbols Rounded";
   font-size: 16px;
@@ -109,11 +166,22 @@ button.spook-tab-on { background: #FF4D9A; color: #0B0A12; border: 1px solid #FF
 .spook-cmd-danger { border-color: #FF5C6C; }
 notebook.spook-tabs > header { background: #0B0A12; }
 notebook.spook-tabs > header > tabs > tab {
-  background: #16141F; color: #F4F1FF; padding: 6px 10px;
-  font-size: 11px; border: 1px solid #2A2736;
-  border-radius: 10px 10px 0 0;
+  background: transparent; color: #B8B4C8; padding: 8px 18px;
+  font-size: 11px; font-weight: 700; border: none;
+  transition: all 150ms ease;
 }
-notebook.spook-tabs > header > tabs > tab:checked { background: #FF4D9A; color: #0B0A12; }
+notebook.spook-tabs > header > tabs > tab:hover { color: #F4F1FF; }
+notebook.spook-tabs > header > tabs > tab:checked {
+  background: transparent; color: #FF4D9A;
+  border-bottom: 2px solid #FF4D9A;
+}
+scrollbar { background-color: transparent; border: none; }
+scrollbar slider {
+  background-color: #3A3648; border-radius: 8px;
+  min-width: 6px; min-height: 6px; margin: 2px;
+}
+scrollbar slider:hover { background-color: #FF4D9A; }
+scrollbar:disabled slider { background-color: #2A2736; }
 """
 
 
@@ -245,29 +313,29 @@ PERFIS_SCAN = [
 ]
 
 MEDIA_COMMANDS = [
-    ("PREV", "\ue045", ["playerctl", "previous"]),
-    ("PLAY", "\ue037", ["playerctl", "play-pause"]),
-    ("NEXT", "\ue044", ["playerctl", "next"]),
-    ("VOL-", "\ue04d", ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]),
-    ("VOL+", "\ue050", ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]),
+    ("PREV", "⏮", ["playerctl", "previous"]),
+    ("PLAY", "⏯", ["playerctl", "play-pause"]),
+    ("NEXT", "⏭", ["playerctl", "next"]),
+    ("VOL-", "🔉", ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"]),
+    ("VOL+", "🔊", ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%+"]),
 ]
 
 NETWORK_COMMANDS = [
-    ("INTERFACES", "\ue328", "ip -br addr"),
-    ("ROUTES", "\ueacd", "ip route"),
-    ("DNS", "\ue4fc", "resolvectl status 2>/dev/null || cat /etc/resolv.conf"),
-    ("PORTS", "\ueb2f", "ss -tlnp"),
-    ("TAILSCALE", "\ue9f4", "tailscale status 2>/dev/null || echo 'tailscale not running'"),
-    ("PUBLIC IP", "\ue80b", "curl -s --max-time 5 https://ifconfig.me || echo 'offline'"),
+    ("INTERFACES", "🌐", "ip -br addr"),
+    ("ROUTES", "🛣", "ip route"),
+    ("DNS", "🔍", "resolvectl status 2>/dev/null || cat /etc/resolv.conf"),
+    ("PORTS", "🔌", "ss -tlnp"),
+    ("TAILSCALE", "🦎", "tailscale status 2>/dev/null || echo 'tailscale not running'"),
+    ("PUBLIC IP", "🌍", "curl -s --max-time 5 https://ifconfig.me || echo 'offline'"),
 ]
 
 SYSTEM_COMMANDS = [
-    ("LOCK", "\ue899", "loginctl lock-session", False),
-    ("SCREENSHOT", "\ue412", "grim -g '$(slurp)' /tmp/spook-screenshot.png 2>/dev/null && notify-send 'Screenshot saved' || echo 'grim not installed'", False),
-    ("RELOAD WM", "\ue5d5", "hyprctl reload", False),
-    ("SUSPEND", "\uf159", "systemctl suspend", True),
-    ("REBOOT", "\uf053", "systemctl reboot", True),
-    ("SHUTDOWN", "\uf8c7", "systemctl poweroff", True),
+    ("LOCK", "🔒", "loginctl lock-session", False),
+    ("SCREENSHOT", "📸", "grim -g '$(slurp)' /tmp/spook-screenshot.png 2>/dev/null && notify-send 'Screenshot saved' || echo 'grim not installed'", False),
+    ("RELOAD WM", "🔄", "hyprctl reload", False),
+    ("SUSPEND", "💤", "systemctl suspend", True),
+    ("REBOOT", "↻", "systemctl reboot", True),
+    ("SHUTDOWN", "⏻", "systemctl poweroff", True),
 ]
 
 
@@ -279,6 +347,7 @@ class SpookOverlay(Gtk.Application):
         self._chat_last_draw = ""
         self._tasks_cache = {}   # id -> task (cache vivo vindo do socket do relay)
         self._socket_online = False
+        self._presenca_celular = False  # celular com socket ativo no servidor (via rede, nao adb USB)
         self.arch_status_label = Gtk.Label(xalign=0)
         self.arch_metrics_label = Gtk.Label(xalign=0)
         self.arch_bat_label = Gtk.Label(xalign=0)
@@ -328,6 +397,8 @@ class SpookOverlay(Gtk.Application):
         self.ai_chat_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.ai_entry = None
         self.ai_loading = False
+        self.ai_session_id = ""
+        self.status_label = None
         self.hub_sub_tabs = None
         self.hub_pages = None
         self.janela = None
@@ -371,8 +442,10 @@ class SpookOverlay(Gtk.Application):
         titulo.add_css_class("spook-title")
         titulo.set_hexpand(True)
         cabeca.append(titulo)
-        status = Gtk.Label(label="ARCH · ANDROID", xalign=1)
+        status = Gtk.Label(label="SPOOK // OFFLINE", xalign=1)
         status.add_css_class("spook-sub")
+        status.add_css_class("spook-status")
+        self.status_label = status
         cabeca.append(status)
         raiz.append(cabeca)
 
@@ -539,7 +612,7 @@ class SpookOverlay(Gtk.Application):
         "cpu": "\ue30d",
         "temp": "\ue1ff",
         "load": "\ue9e4",
-        "loc": "\ue1db",
+        "loc": "\ue0c8",  # Material Symbols "place" (pin). U+E1DB era "storage"
     }
 
     def _rich_card(self, titulo, status_label, linhas, acento_css=""):
@@ -604,6 +677,7 @@ class SpookOverlay(Gtk.Application):
         ring = self._btn_icone("\uf0d4", "RING PHONE", horizontal=True)
         ring.add_css_class("spook-btn")
         ring.add_css_class("spook-accent")
+        ring.set_halign(Gtk.Align.START)
         ring.connect("clicked", lambda *_: self._ring_phone())
         box.append(ring)
         return self._scroll(box)
@@ -726,7 +800,6 @@ class SpookOverlay(Gtk.Application):
 
         media_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         media_card.add_css_class("spook-card")
-        media_card.add_css_class("spook-card-arch")
         media_card.append(Gtk.Label(label="MEDIA PLAYER", xalign=0, css_name="spook-card-title"))
         media_row = Gtk.Box(spacing=6)
         for label, glyph, cmd in MEDIA_COMMANDS:
@@ -739,7 +812,6 @@ class SpookOverlay(Gtk.Application):
 
         net_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         net_card.add_css_class("spook-card")
-        net_card.add_css_class("spook-card-arch")
         net_card.append(Gtk.Label(label="NETWORK INFO", xalign=0, css_name="spook-card-title"))
         net_grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         for label, glyph, cmd in NETWORK_COMMANDS:
@@ -762,7 +834,6 @@ class SpookOverlay(Gtk.Application):
 
         sys_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         sys_card.add_css_class("spook-card")
-        sys_card.add_css_class("spook-card-arch")
         sys_card.append(Gtk.Label(label="SYSTEM", xalign=0, css_name="spook-card-title"))
         sys_grid = Gtk.Box(spacing=8)
         for label, glyph, cmd, danger in SYSTEM_COMMANDS:
@@ -878,11 +949,6 @@ class SpookOverlay(Gtk.Application):
         entry.add_css_class("spook-input")
         entry.set_hexpand(True)
         entry.set_placeholder_text("new task...")
-        add_btn = Gtk.Button(label="\ue9de")
-        add_btn.add_css_class("spook-btn")
-        add_btn.add_css_class("spook-msi-btn")
-        add_btn.add_css_class("spook-accent")
-        add_btn.set_tooltip_text("Adicionar task")
 
         def do_add(_):
             t = entry.get_text().strip()
@@ -895,9 +961,7 @@ class SpookOverlay(Gtk.Application):
                     self._bg(lambda: (hub_store.criar_task(t), self._refresh_tasks()))
 
         entry.connect("activate", do_add)
-        add_btn.connect("clicked", do_add)
         input_row.append(entry)
-        input_row.append(add_btn)
         box.append(input_row)
         task_scroll = Gtk.ScrolledWindow()
         task_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -1042,7 +1106,48 @@ class SpookOverlay(Gtk.Application):
             pass
         return True
 
-    def _render_msg(self, msg):
+    @staticmethod
+    def _tint_button(btn, classe):
+        """GTK4: CSS `color` no nó do Button NÃO tinge o label interno (o tema
+        o pinta). Aplica a classe também no child (Gtk.Label) — só assim as cores
+        do app (copiar rosa / lixeira vermelha) aparecem de verdade."""
+        child = btn.get_child()
+        if child is not None:
+            child.add_css_class(classe)
+
+    def _rodape_msg(self, msg, pend=False):
+        """Rodape da mensagem estilo Android: icones copiar/lixeira DENTRO da
+        bolha, alinhados a direita. Ficam 16px longe da borda => nunca debaixo
+        da scrollbar (o botao antigo ficava no fim da linha, sob o scrollbar,
+        e o clique rolava a conversa em vez de apagar)."""
+        texto = msg.get("texto", "")
+        rodape = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        rodape.set_halign(Gtk.Align.END)
+        if pend:
+            p = Gtk.Label(label="\u23f3")
+            p.add_css_class("spook-note")
+            p.set_tooltip_text("enviando...")
+            rodape.append(p)
+        if texto:
+            copy_btn = Gtk.Button(label="\ue14d")
+            copy_btn.add_css_class("spook-btn")
+            copy_btn.add_css_class("spook-msi-btn")
+            copy_btn.add_css_class("spook-msi-copy")
+            self._tint_button(copy_btn, "spook-msi-copy")
+            copy_btn.set_tooltip_text("Copiar texto")
+            copy_btn.connect("clicked", lambda _, t=texto: self._copiar_texto(t) if t else None)
+            rodape.append(copy_btn)
+        del_btn = Gtk.Button(label="\ue92e")
+        del_btn.add_css_class("spook-btn")
+        del_btn.add_css_class("spook-msi-btn")
+        del_btn.add_css_class("spook-msi-del")
+        self._tint_button(del_btn, "spook-msi-del")
+        del_btn.set_tooltip_text("Apagar")
+        del_btn.connect("clicked", lambda _, m=msg: self._bg(lambda: self._apagar_msg_thread(m)))
+        rodape.append(del_btn)
+        return rodape
+
+    def _render_msg(self, msg, pend=False):
         """Roda fora da thread principal? NAO: chamado do idle. Monta o widget de 1 msg."""
         quem = msg.get("from", "?").upper()
         texto = msg.get("texto", "")
@@ -1079,6 +1184,7 @@ class SpookOverlay(Gtk.Application):
                 arq_lab = Gtk.Label(label=f"\u2197 {nome}", xalign=0)
                 arq_lab.add_css_class("spook-loc")
                 bolha.append(arq_lab)
+        bolha.append(self._rodape_msg(msg, pend))
         return bolha
 
     def _player_midia(self, nome, tipo):
@@ -1175,6 +1281,85 @@ class SpookOverlay(Gtk.Application):
         except Exception:
             pass
 
+    def _nome_app(self, pacote):
+        """com.spotify.music -> MUSIC (o pacote cru no popup fica feio)."""
+        try:
+            return str(pacote or "celular").split(".")[-1].upper()
+        except Exception:
+            return "CELULAR"
+
+    def _mostrar_notificacao(self, app, titulo, texto):
+        """Popup da notificacao do celular, no mesmo visual do app Android."""
+        try:
+            popup = Gtk.Window()
+            popup.set_title("SPOOK")
+            popup.set_default_size(340, 118)
+            popup.set_resizable(False)
+            popup.add_css_class("spook")
+            popup.set_transient_for(self.janela)
+            popup.set_hide_on_close(True)
+
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            box.add_css_class("spook-root")
+            box.set_margin_top(14)
+            box.set_margin_bottom(14)
+            box.set_margin_start(16)
+            box.set_margin_end(16)
+
+            hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            icone = Gtk.Label(label="\ue7f4")          # sino dos Material Symbols
+            icone.add_css_class("spook-msi")
+            icone.add_css_class("spook-msi-btn")
+            hdr.append(icone)
+
+            lbl_app = Gtk.Label(label=self._nome_app(app), xalign=0)
+            lbl_app.add_css_class("spook-card-title")
+            lbl_app.set_hexpand(True)
+            hdr.append(lbl_app)
+
+            btn_fechar = Gtk.Button(label="\ue92e")
+            btn_fechar.add_css_class("spook-btn")
+            btn_fechar.add_css_class("spook-msi-btn")
+            btn_fechar.add_css_class("spook-msi-del")
+            btn_fechar.connect("clicked", lambda _: popup.close())
+            hdr.append(btn_fechar)
+            box.append(hdr)
+
+            if titulo:
+                lbl_tit = Gtk.Label(label=titulo, xalign=0, wrap=True)
+                lbl_tit.add_css_class("spook-msg-txt")
+                lbl_tit.set_max_width_chars(36)
+                box.append(lbl_tit)
+
+            if texto:
+                lbl_txt = Gtk.Label(label=texto, xalign=0, wrap=True)
+                lbl_txt.add_css_class("spook-note")
+                lbl_txt.set_max_width_chars(36)
+                box.append(lbl_txt)
+
+            popup.set_child(box)
+            popup.present()
+
+            # canto superior direito, empilhando cada notificacao nova
+            self._popups_abertos = [p for p in getattr(self, "_popups_abertos", []) if p.get_visible()]
+            fila = len(self._popups_abertos)
+            self._popups_abertos.append(popup)
+            GLib.idle_add(self._posicionar_popup, popup, fila)
+            GLib.timeout_add_seconds(8, lambda: (popup.close(), False)[1])
+        except Exception as e:
+            print(f"[OVERLAY] popup falhou: {e}", flush=True)
+
+    def _posicionar_popup(self, popup, fila):
+        try:
+            display = self.janela.get_display()
+            monitor = display.get_monitors().get_item(0)
+            g = monitor.get_geometry()
+            popup.set_position(Gtk.WindowPosition.NONE)
+            popup.move(g.x + g.width - 372, g.y + 48 + fila * 132)
+        except Exception:
+            pass
+        return False
+
     def _fill_chat(self, msgs, ids_pendentes=()):
         # evita redraw desnecessario (era isso q fazia a tela "mexer" e re-baixar midia)
         fp = "{}|{}".format(
@@ -1187,30 +1372,7 @@ class SpookOverlay(Gtk.Application):
         self._clear(self.chat_box)
         for msg in msgs[-60:]:
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-            corpo = self._render_msg(msg)
-            row.append(corpo)
-            texto = msg.get("texto", "")
-            copiar = texto or bool(msg.get("arquivo"))
-            if copiar:
-                copy_btn = Gtk.Button(label="\ue14d")
-                copy_btn.add_css_class("spook-btn")
-                copy_btn.add_css_class("spook-msi-btn")
-                copy_btn.add_css_class("spook-msi-copy")
-                copy_btn.set_tooltip_text("Copiar texto")
-                copy_btn.connect("clicked", lambda _, t=texto: self._copiar_texto(t) if t else None)
-                row.append(copy_btn)
-            del_btn = Gtk.Button(label="\ue92e")
-            del_btn.add_css_class("spook-btn")
-            del_btn.add_css_class("spook-msi-btn")
-            del_btn.add_css_class("spook-msi-del")
-            del_btn.set_tooltip_text("Apagar")
-            del_btn.connect("clicked", lambda _, m=msg: self._bg(lambda: self._apagar_msg_thread(m)))
-            row.append(del_btn)
-            if msg.get("id") in ids_pendentes:
-                pend = Gtk.Label(label="\u23f3")
-                pend.add_css_class("spook-note")
-                pend.set_tooltip_text("enviando...")
-                row.append(pend)
+            row.append(self._render_msg(msg, msg.get("id") in ids_pendentes))
             self.chat_box.append(row)
         self._scroll_chat_fim(force=bool(ids_pendentes))
 
@@ -1313,11 +1475,52 @@ class SpookOverlay(Gtk.Application):
                 if isinstance(msg, dict) and msg.get("id"):
                     self._tasks_cache.pop(msg["id"], None)
                 GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
+
+            @self.sio.on("notificacao_nova")
+            def on_notificacao_nova(dados):
+                if isinstance(dados, dict):
+                    app = dados.get("app", "celular")
+                    titulo = dados.get("titulo", "")
+                    texto = dados.get("texto", "")
+                    print(f"[OVERLAY] notificacao_nova: {app} | {titulo} | {texto}", flush=True)
+                    # Entrega somente ao centro nativo de notificações do ii.
+                    try:
+                        subprocess.Popen(
+                            ["notify-send", "-a", "spook", "-u", "normal",
+                             "-h", "string:x-canonical-private-synchronous:false",
+                             self._nome_app(app), (titulo or "") + (
+                                 "\n" + texto if texto else "")],
+                            env=dict(os.environ),
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        )
+                    except Exception as e:
+                        print(f"[OVERLAY] notify-send falhou: {e}", flush=True)
+
+            @self.sio.on("celular_presenca")
+            def on_celular_presenca(dados):
+                self._presenca_celular = bool((dados or {}).get("online"))
+                GLib.idle_add(lambda: self._atualizar_status(self._presenca_celular))
+
             self._socket_online = True
             self._bg(self._puxar_lists)
         except Exception:
             self.sio = None
             self._socket_online = False
+
+    def _atualizar_status(self, celular_online=False):
+        """Cabecalho no mesmo espirito do app: SPOOK // <estado> em mono."""
+        if self.status_label is None:
+            return
+        if not self._socket_online:
+            texto, cor = "SPOOK // OFFLINE", "spook-err"
+        elif celular_online or self._presenca_celular:
+            texto, cor = "SPOOK // ONLINE", "spook-ok"
+        else:
+            texto, cor = "SPOOK // PHONE OFF", "spook-warn"
+        self.status_label.set_text(texto)
+        for classe in ("spook-ok", "spook-warn", "spook-err"):
+            self.status_label.remove_css_class(classe)
+        self.status_label.add_css_class(cor)
 
     def _flash_chat(self, msg):
         self.chat_status_label.set_text(msg)
@@ -1341,11 +1544,19 @@ class SpookOverlay(Gtk.Application):
     def _fill_tasks(self, tasks):
         self._clear(self.tasks_box)
         for t in tasks:
-            row = Gtk.Box(spacing=6)
-            chk = Gtk.CheckButton(label=t.get("titulo", ""))
-            chk.set_active(bool(t.get("feito")))
             tid = t.get("id")
             estado = bool(t.get("feito"))
+            criado_por = str(t.get("criado_por", "?")).upper() or "?"
+            is_local = criado_por in ("ARCH", "PC")
+
+            bolha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            bolha.add_css_class("spook-msg-arch" if is_local else "spook-msg-phone")
+            bolha.set_hexpand(True)
+
+            chk = Gtk.CheckButton()
+            chk.set_active(estado)
+            chk.set_valign(Gtk.Align.CENTER)
+            chk.set_tooltip_text("Marcar feita")
 
             def _toggle(b, i=tid, e=estado):
                 if b.get_active() == e:
@@ -1356,8 +1567,31 @@ class SpookOverlay(Gtk.Application):
                     self._bg(lambda: (hub_store.marcar_task(i, bool(b.get_active())), self._refresh_tasks()))
 
             chk.connect("toggled", _toggle)
-            del_btn = Gtk.Button(label="X")
+            bolha.append(chk)
+
+            conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            conteudo.set_hexpand(True)
+
+            cab = Gtk.Label(label=f"{criado_por} · {hora(t.get('ts', 0))}", xalign=0)
+            cab.add_css_class("spook-note")
+            cab.add_css_class("spook-msg-h")
+            cab.add_css_class("spook-msg-h-arch" if is_local else "spook-msg-h-phone")
+            conteudo.append(cab)
+
+            titulo = Gtk.Label(label=t.get("titulo", ""), xalign=0, wrap=True)
+            titulo.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+            titulo.add_css_class("spook-msg-txt")
+            if estado:
+                titulo.add_css_class("spook-tarefa-feita")
+            conteudo.append(titulo)
+
+            rodape = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            rodape.set_halign(Gtk.Align.END)
+
+            del_btn = Gtk.Button(label="Del")
             del_btn.add_css_class("spook-btn")
+            del_btn.add_css_class("spook-err-btn")
+            del_btn.set_tooltip_text("Apagar task")
 
             def _del(_, i=tid):
                 if self._socket_online:
@@ -1366,12 +1600,10 @@ class SpookOverlay(Gtk.Application):
                     self._bg(lambda: (hub_store.apagar_task(i), self._refresh_tasks()))
 
             del_btn.connect("clicked", _del)
-            creator = Gtk.Label(label=t.get("criado_por", ""), xalign=0)
-            creator.add_css_class("spook-note")
-            row.append(chk)
-            row.append(del_btn)
-            self.tasks_box.append(row)
-            self.tasks_box.append(creator)
+            rodape.append(del_btn)
+            conteudo.append(rodape)
+            bolha.append(conteudo)
+            self.tasks_box.append(bolha)
 
     def _enviar_ai(self, entry):
         texto = entry.get_text().strip()
@@ -1393,10 +1625,15 @@ class SpookOverlay(Gtk.Application):
             def on_resp(data):
                 result[0] = data.get("ok", False)
                 result[1] = data.get("resposta", "")
+                if data.get("sessao_id"):
+                    self.ai_session_id = data["sessao_id"]
                 sio.disconnect()
 
             sio.connect(AI_URL, wait_timeout=10)
-            sio.emit("chat_ia_perguntar", {"pergunta": pergunta}, namespace="/ia")
+            envio = {"pergunta": pergunta}
+            if self.ai_session_id:
+                envio["sessao_id"] = self.ai_session_id
+            sio.emit("chat_ia_perguntar", envio, namespace="/ia")
             sio.wait(timeout=60)
             self.ai_messages.append({"role": "ai", "text": result[1] if result[0] else f"Error: {result[1]}"})
         except ImportError:
@@ -1518,26 +1755,24 @@ class SpookOverlay(Gtk.Application):
         rotulo.add_css_class("spook-card-title")
         caixa.append(rotulo)
 
-        # Arch location row
+        # pin do Arch (ciano) + pin do Android (pink): dizem de quem e a posicao
         row_arch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         ic_arch = Gtk.Label(label=self._MSI["loc"])
         ic_arch.add_css_class("spook-msi")
+        ic_arch.add_css_class("spook-msi-arch")
         row_arch.append(ic_arch)
         self.home_arch_label.set_hexpand(True)
-        self.home_arch_label.add_css_class("spook-metric")
         row_arch.append(self.home_arch_label)
         caixa.append(row_arch)
 
-        # Android location row
         row_cel = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         ic_cel = Gtk.Label(label=self._MSI["loc"])
         ic_cel.add_css_class("spook-msi")
+        ic_cel.add_css_class("spook-msi-android")
         row_cel.append(ic_cel)
         self.home_cel_label.set_hexpand(True)
-        self.home_cel_label.add_css_class("spook-metric")
         row_cel.append(self.home_cel_label)
         caixa.append(row_cel)
-
         botoes = Gtk.Box(spacing=6)
         botoes.append(self.home_map_arch)
         botoes.append(self.home_map_cel)
@@ -1586,7 +1821,7 @@ class SpookOverlay(Gtk.Application):
             pass
         except json.JSONDecodeError:
             pass
-        online = bool(cel.get("online"))
+        online = bool(cel.get("online")) or self._presenca_celular
         bat_cel = cel.get("bateria")
         self.android_online_label.set_text("● ONLINE" if online else "○ OFFLINE")
         self.android_online_label.remove_css_class("spook-ok")
@@ -1604,6 +1839,7 @@ class SpookOverlay(Gtk.Application):
         self.android_cpu_label.set_text(f"CPU {cel.get('cpu_pct', '--')}%")
         self.android_temp_label.set_text(f"TEMP {cel.get('temp_c', '--')}°C")
         self.android_load_label.set_text(f"LOAD {cel.get('load1', '--')}")
+        self._atualizar_status(online)
 
         enviando = getattr(self, "_enviando_arquivo", False)
         if not enviando:
