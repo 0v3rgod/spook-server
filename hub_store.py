@@ -8,6 +8,9 @@ import uuid
 from pathlib import Path
 
 REMOTE = os.environ.get("SPOOK_REMOTE", "gdrive:SPOOK")
+# 2026-10-21: desativado por decisão do usuário. NÃO sincronizar com Google Drive
+# (token revogado). Backup vai para nextcloud conforme configuração.
+DRIVE_SYNC_DISABLED = True
 CHAT = "chat"
 MEDIA = "media"
 TASKS = "tasks"
@@ -126,6 +129,9 @@ def _flush_pending():
     A gravacao no Drive e serializada com _upload_lock e so sobe o que ainda
     NAO existe (o Drive permite nomes duplicados, e 2 processos do host
     gravando o mesmo id criavam doc duplicado no chat/midia)."""
+    if globals().get("DRIVE_SYNC_DISABLED"):
+        # Desativado: manter apenas em memoria/espelho local. Não tenta subir pro Drive.
+        return
     fd = _pend_lock()
     try:
         _PENDING.update(_carregar_pending())

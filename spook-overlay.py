@@ -19,14 +19,19 @@ gi.require_version("Gdk", "4.0")
 gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 
-import hub_store
-
+import sys
 BASE = Path.home() / "pentestlink-servidor"
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
+
+import hub_store
+from spook_leitor import SpookLeitorManager
+
 BATERIA_CELULAR = Path("/tmp/bateria_celular.txt")
 CELULAR_STATUS = Path("/tmp/celular_status.json")
 CELULAR_STATUS_PY = BASE / "celular_status.py"
 API_BASE = "http://127.0.0.1:5000"
-# Hub unico: o RELAY da Oracle (o Redmi 100.79.55.68 foi desativado em 16/09).
+# Hub: Oracle Relay (sempre online, independente do notebook).
 HUB_URL = "http://100.70.88.101:5000"
 SOCKET_URL = HUB_URL
 MIDIA_OVERLAY_DIR = Path("/tmp/spook_media_overlay")
@@ -49,6 +54,28 @@ window.spook { background: #0B0A12; color: #F4F1FF; }
   background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
   padding: 14px 16px;
 }
+.spook-gal-image { border-left: 4px solid #FF7A45; }
+.spook-gal-video { border-left: 4px solid #B44AFF; }
+.spook-gal-audio { border-left: 4px solid #5CE1E6; }
+.spook-gal-file  { border-left: 4px solid #9AA4B2; }
+.spook-gal-badge { font-size: 9px; font-weight: 700; border-radius: 6px; padding: 1px 6px; }
+.spook-gal-badge-all   { color: #FF4D9A; background-color: rgba(255,77,154,0.22); }
+.spook-gal-badge-image { color: #FF7A45; background-color: rgba(255,122,69,0.16); }
+.spook-gal-badge-video { color: #B44AFF; background-color: rgba(180,74,255,0.16); }
+.spook-gal-badge-audio { color: #5CE1E6; background-color: rgba(92,225,230,0.16); }
+.spook-gal-badge-file  { color: #9AA4B2; background-color: rgba(154,164,178,0.16); }
+button.spook-gal-filter {
+  background-image: none; background-color: transparent; box-shadow: none;
+  color: #8A8F98; border: 1px solid #2A2736; border-radius: 8px;
+  padding: 3px 10px; font-size: 10px; font-weight: 700;
+  min-height: 0; min-width: 0; transition: all 140ms ease;
+}
+button.spook-gal-filter:hover { color: #F4F1FF; border-color: #6E6A81; }
+button.spook-gal-filter-all-on   { color: #FF4D9A; border-color: #FF4D9A; background-color: rgba(255,77,154,0.18); }
+button.spook-gal-filter-image-on { color: #FF7A45; border-color: #FF7A45; background-color: rgba(255,122,69,0.18); }
+button.spook-gal-filter-video-on { color: #B44AFF; border-color: #B44AFF; background-color: rgba(180,74,255,0.18); }
+button.spook-gal-filter-audio-on { color: #5CE1E6; border-color: #5CE1E6; background-color: rgba(92,225,230,0.18); }
+button.spook-gal-filter-file-on  { color: #9AA4B2; border-color: #9AA4B2; background-color: rgba(154,164,178,0.18); }
 .spook-rich-card {
   background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
   padding: 16px 18px;
@@ -157,6 +184,10 @@ button.spook-tab-on {
   font-size: 16px;
   color: #5CE1E6;
 }
+.spook-msi-btn.spook-gal-ico-image { color: #FF7A45; }
+.spook-msi-btn.spook-gal-ico-video { color: #B44AFF; }
+.spook-msi-btn.spook-gal-ico-audio { color: #5CE1E6; }
+.spook-msi-btn.spook-gal-ico-file  { color: #9AA4B2; }
 .spook-msi-copy { color: #FF4D9A; }
 .spook-msi-del { color: #FF5C6C; }
 .spook-msi-send { color: #FF4D9A; }
@@ -197,6 +228,20 @@ def hora(ts):
         return datetime.datetime.fromtimestamp(int(ts) / 1000).strftime("%d/%m %H:%M")
     except Exception:
         return ""
+
+
+def _fmt_bytes(b):
+    try:
+        b = float(b)
+    except (TypeError, ValueError):
+        return "--"
+    if b >= 1024 ** 3:
+        return f"{b / 1024 ** 3:.1f} GB"
+    if b >= 1024 ** 2:
+        return f"{b / 1024 ** 2:.1f} MB"
+    if b >= 1024:
+        return f"{b / 1024:.0f} KB"
+    return f"{b:.0f} B"
 
 
 def executar(cmd):
@@ -470,6 +515,8 @@ class SpookOverlay(Gtk.Application):
         tabs.set_vexpand(True)
         tabs.append_page(self._pagina_home(), Gtk.Label(label="HOME"))
         tabs.append_page(self._pagina_hub(), Gtk.Label(label="CHAT"))
+        self.leitor_mgr = SpookLeitorManager(self)
+        tabs.append_page(self.leitor_mgr.criar_pagina(), Gtk.Label(label="READER"))
         raiz.append(tabs)
         self._init_socketio()
 
@@ -527,14 +574,26 @@ class SpookOverlay(Gtk.Application):
                 return str(destino)
             destino.parent.mkdir(parents=True, exist_ok=True)
             url = SOCKET_URL + "/media/" + urllib.request.quote(nome)
+            token = None
+            arquivo_token = Path.home() / ".pentestlink" / "token_sessao.txt"
+            if arquivo_token.exists():
+                token = arquivo_token.read_text().strip() or None
+            cab = {"Authorization": f"Bearer {token}"} if token else {}
+            req = urllib.request.Request(url, headers=cab)
             tmp = destino.with_suffix(destino.suffix + ".dl")
-            urllib.request.urlretrieve(url, str(tmp))
+            with urllib.request.urlopen(req, timeout=60) as r, open(str(tmp), "wb") as f:
+                shutil.copyfileobj(r, f)
             tmp.rename(destino)
             if destino.exists() and destino.stat().st_size > 0:
                 return str(destino)
         except Exception:
             pass
         return None
+
+    def _abrir_midia_baixada(self, nome):
+        path = self._baixar_midia_http(nome) or hub_store.baixar_midia(nome)
+        if path:
+            executar(["gio", "open", path])
 
     def _escolher_arquivo(self, callback):
         dialog = Gtk.FileDialog()
@@ -613,6 +672,11 @@ class SpookOverlay(Gtk.Application):
         "temp": "\ue1ff",
         "load": "\ue9e4",
         "loc": "\ue0c8",  # Material Symbols "place" (pin). U+E1DB era "storage"
+        "server": "\ue2bd",  # "cloud" (header do card SPOOK SERVER)
+        "hub": "\ue875",     # "dns" (servidor)
+        "status": "\ue63e",  # "wifi"
+        "report": "\ue873",  # "description" (documento)
+        "media": "\ue413",   # "photo_library"
     }
 
     def _rich_card(self, titulo, status_label, linhas, acento_css=""):
@@ -673,21 +737,148 @@ class SpookOverlay(Gtk.Application):
         colunas.append(android_card)
         colunas.append(arch_card)
         box.append(colunas)
+        box.append(self._card_oracle_relay())
         box.append(self._card_local())
-        ring = self._btn_icone("\uf0d4", "RING PHONE", horizontal=True)
-        ring.add_css_class("spook-btn")
-        ring.add_css_class("spook-accent")
-        ring.set_halign(Gtk.Align.START)
-        ring.connect("clicked", lambda *_: self._ring_phone())
-        box.append(ring)
         return self._scroll(box)
 
-    def _ring_phone(self):
-        def _tentar():
-            executar(["curl", "-s", "-X", "POST", f"{API_BASE}/tocar-celular"])
-            if CELULAR_STATUS_PY.exists():
-                executar(["python3", str(CELULAR_STATUS_PY), "--ring"])
-        self._bg(_tentar)
+    def _card_oracle_relay(self):
+        """Card de status do Oracle Relay (sempre online)."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.add_css_class("spook-card")
+        card.add_css_class("spook-card-arch")
+
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        ic = Gtk.Label(label=self._MSI["hub"])
+        ic.add_css_class("spook-msi")
+        ic.add_css_class("spook-msi-arch")
+        hdr.append(ic)
+        titulo = Gtk.Label(label="ORACLE RELAY", xalign=0)
+        titulo.add_css_class("spook-card-title")
+        titulo.add_css_class("spook-msg-h-arch")
+        hdr.append(titulo)
+        card.append(hdr)
+
+        self.relay_hub_label = Gtk.Label(label="Oracle VM (100.70.88.101:5000)", xalign=0)
+        self.relay_status_label = Gtk.Label(label="Checking...", xalign=0)
+        self.relay_reports_label = Gtk.Label(label="—", xalign=0)
+        self.relay_media_label = Gtk.Label(label="—", xalign=0)
+
+        linhas = [
+            ("hub", "Relay", self.relay_hub_label),
+            ("status", "Status", self.relay_status_label),
+            ("report", "Reports", self.relay_reports_label),
+            ("media", "Media", self.relay_media_label),
+        ]
+        grade = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        grade.set_margin_top(8)
+        for chave, nome, lbl_valor in linhas:
+            linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            ic = Gtk.Label(label=self._MSI.get(chave, "\ue322"))
+            ic.add_css_class("spook-msi")
+            linha.append(ic)
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            nm = Gtk.Label(label=nome, xalign=0)
+            nm.add_css_class("spook-note")
+            lbl_valor.add_css_class("spook-loc")
+            col.append(nm)
+            col.append(lbl_valor)
+            linha.append(col)
+            grade.append(linha)
+
+        card.append(grade)
+        self._bg(self._atualizar_oracle_relay)
+        GLib.timeout_add_seconds(30, self._refrescar_status_relay)
+        return card
+
+    def _refrescar_status_relay(self):
+        """Status do Oracle Relay: Online/Offline + connected clients via /api/connected."""
+        def _fazer():
+            try:
+                import urllib.request, json, ssl
+                tok = None
+                tf = Path.home() / ".pentestlink" / "token_sessao.txt"
+                if tf.exists():
+                    tok = tf.read_text().strip() or None
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                req = urllib.request.Request(f"{SOCKET_URL}/healthz")
+                if tok:
+                    req.add_header("Authorization", f"Bearer {tok}")
+                with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                    if r.status != 200:
+                        cod = r.status
+                        GLib.idle_add(lambda c=cod: self.relay_status_label.set_text(f"HTTP {c}"))
+                        return
+                # Check connected clients
+                android_online = False
+                try:
+                    ireq = urllib.request.Request(f"{SOCKET_URL}/api/connected")
+                    if tok:
+                        ireq.add_header("Authorization", f"Bearer {tok}")
+                    with urllib.request.urlopen(ireq, timeout=8, context=ctx) as ri:
+                        conn = json.loads(ri.read().decode())
+                    for info in conn.get("clients", {}).values():
+                        if info.get("device") == "android":
+                            android_online = True
+                            break
+                except Exception:
+                    pass
+                texto = "Online"
+                if android_online:
+                    texto += " · Android"
+                GLib.idle_add(lambda t=texto: self.relay_status_label.set_text(t))
+                GLib.idle_add(lambda: self._atualizar_status(android_online))
+            except Exception:
+                GLib.idle_add(lambda: self.relay_status_label.set_text("Offline"))
+        self._bg(_fazer)
+        return True
+
+    def _atualizar_oracle_relay(self):
+        """Consulta /media e /relatorios do Oracle Relay."""
+        self._refrescar_status_relay()
+
+        def _fazer():
+            try:
+                tok = None
+                tf = Path.home() / ".pentestlink" / "token_sessao.txt"
+                if tf.exists():
+                    tok = tf.read_text().strip() or None
+                url = f"{SOCKET_URL}/relatorios"
+                req = urllib.request.Request(url)
+                if tok:
+                    req.add_header("Authorization", f"Bearer {tok}")
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                    if r.status == 200:
+                        data = json.loads(r.read().decode())
+                        qtd = len(data.get("relatorios", []))
+                        GLib.idle_add(lambda: self.relay_reports_label.set_text(f"{qtd} files"))
+            except Exception:
+                GLib.idle_add(lambda: self.relay_reports_label.set_text("—"))
+
+            try:
+                tok = None
+                tf = Path.home() / ".pentestlink" / "token_sessao.txt"
+                if tf.exists():
+                    tok = tf.read_text().strip() or None
+                url = f"{SOCKET_URL}/media"
+                req = urllib.request.Request(url)
+                if tok:
+                    req.add_header("Authorization", f"Bearer {tok}")
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+                    if r.status == 200:
+                        data = json.loads(r.read().decode())
+                        qtd = len(data.get("items", []))
+                        GLib.idle_add(lambda: self.relay_media_label.set_text(f"{qtd} files"))
+            except Exception:
+                GLib.idle_add(lambda: self.relay_media_label.set_text("—"))
+        self._bg(_fazer)
 
     # ── SCANS ──
 
@@ -870,6 +1061,7 @@ class SpookOverlay(Gtk.Application):
         pages = [
             ("chat", "CHAT", None),
             ("tasks", None, "\ue9de"),
+            ("galeria", None, "\ue413"),
         ]
         for key, label, glyph in pages:
             if glyph:
@@ -886,6 +1078,7 @@ class SpookOverlay(Gtk.Application):
 
         self.hub_pages.add_named(self._hub_chat_page(), "chat")
         self.hub_pages.add_named(self._hub_tasks_page(), "tasks")
+        self.hub_pages.add_named(self._hub_galeria_page(), "galeria")
 
         def switch_tab(key):
             def cb(_):
@@ -970,6 +1163,160 @@ class SpookOverlay(Gtk.Application):
         box.append(task_scroll)
         return box
 
+    def _hub_galeria_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.galeria_items = []
+        self.galeria_filtro = "all"
+        self.galeria_filter_btns = {}
+        hdr = Gtk.Box(spacing=8)
+        hdr.append(Gtk.Label(label="GALERIA", xalign=0, css_name="spook-card-title"))
+        self.galeria_count_label = Gtk.Label(label="0", xalign=0)
+        self.galeria_count_label.add_css_class("spook-gal-badge")
+        self.galeria_count_label.add_css_class("spook-gal-badge-all")
+        hdr.append(self.galeria_count_label)
+        refresh_btn = Gtk.Button(label="REFRESH")
+        refresh_btn.add_css_class("spook-btn")
+        refresh_btn.connect("clicked", lambda *_: self._carregar_galeria())
+        hdr.append(refresh_btn)
+        box.append(hdr)
+
+        filtros = [
+            ("all", "TODOS"), ("image", "IMG"), ("video", "VÍDEO"),
+            ("audio", "ÁUDIO"), ("file", "ARQ"),
+        ]
+        filtro_row = Gtk.Box(spacing=6)
+        for chave, rotulo in filtros:
+            b = Gtk.Button(label=rotulo)
+            b.add_css_class("spook-gal-filter")
+            b.add_css_class(f"spook-gal-filter-{chave}")
+            b.connect("clicked", lambda _b, c=chave: self._filtrar_galeria(c))
+            self.galeria_filter_btns[chave] = b
+            filtro_row.append(b)
+        box.append(filtro_row)
+        self._atualizar_botoes_filtro()
+
+        self.galeria_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        galeria_scroll = Gtk.ScrolledWindow()
+        galeria_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        galeria_scroll.set_vexpand(True)
+        galeria_scroll.set_child(self.galeria_box)
+        box.append(galeria_scroll)
+
+        self._carregar_galeria()
+        return box
+
+    def _carregar_galeria(self):
+        def _fazer():
+            try:
+                import urllib.request, json, ssl
+                tok = None
+                tf = Path.home() / ".pentestlink" / "token_sessao.txt"
+                if tf.exists():
+                    tok = tf.read_text().strip() or None
+                url = f"{SOCKET_URL}/media"
+                req = urllib.request.Request(url)
+                if tok:
+                    req.add_header("Authorization", f"Bearer {tok}")
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=10, context=ctx) as r:
+                    if r.status == 200:
+                        data = json.loads(r.read().decode())
+                        items = data.get("items", [])
+                        GLib.idle_add(lambda: self._popular_galeria(items))
+                    else:
+                        GLib.idle_add(lambda: self._popular_galeria([]))
+            except Exception:
+                GLib.idle_add(lambda: self._popular_galeria([]))
+        self._bg(_fazer)
+
+    def _popular_galeria(self, items):
+        self.galeria_items = items
+        if hasattr(self, "galeria_count_label"):
+            self.galeria_count_label.set_text(str(len(items)))
+        self._render_galeria()
+
+    def _filtrar_galeria(self, chave):
+        self.galeria_filtro = chave
+        self._atualizar_botoes_filtro()
+        self._render_galeria()
+
+    def _atualizar_botoes_filtro(self):
+        for chave, btn in getattr(self, "galeria_filter_btns", {}).items():
+            cls = f"spook-gal-filter-{chave}-on"
+            if chave == getattr(self, "galeria_filtro", "all"):
+                btn.add_css_class(cls)
+            else:
+                btn.remove_css_class(cls)
+
+    def _render_galeria(self):
+        self._clear(self.galeria_box)
+        items = getattr(self, "galeria_items", [])
+        filtro = getattr(self, "galeria_filtro", "all")
+        _icone = {"image": "\ue3f4", "video": "\ue04d", "audio": "\ue04f", "file": "\ue8e7"}
+        _rotulo = {"image": "IMG", "video": "VÍDEO", "audio": "ÁUDIO", "file": "ARQ"}
+        visiveis = 0
+        for item in items:
+            nome = item.get("name", "")
+            bytes_ = item.get("bytes", 0)
+            ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
+            tipo = "file"
+            if ext in ("png","jpg","jpeg","webp","gif","bmp","heic","heif","avif"):
+                tipo = "image"
+            elif ext in ("mp4","webm","mkv","mov","m4v"):
+                tipo = "video"
+            elif ext in ("mp3","m4a","ogg","wav","aac","opus"):
+                tipo = "audio"
+            if filtro != "all" and tipo != filtro:
+                continue
+            visiveis += 1
+            card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+            card.add_css_class("spook-card")
+            card.add_css_class(f"spook-gal-{tipo}")
+            card.set_margin_top(4)
+            card.set_margin_bottom(4)
+            ic = Gtk.Label(label=_icone[tipo])
+            ic.add_css_class("spook-msi-btn")
+            ic.add_css_class(f"spook-gal-ico-{tipo}")
+            card.append(ic)
+            info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            info.set_hexpand(True)
+            lbl_nome = Gtk.Label(label=nome, xalign=0)
+            lbl_nome.add_css_class("spook-msg-txt")
+            lbl_nome.set_ellipsize(Pango.EllipsizeMode.END)
+            info.append(lbl_nome)
+            meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            badge = Gtk.Label(label=_rotulo[tipo], xalign=0)
+            badge.add_css_class("spook-gal-badge")
+            badge.add_css_class(f"spook-gal-badge-{tipo}")
+            meta.append(badge)
+            lbl_sz = Gtk.Label(label=_fmt_bytes(bytes_), xalign=0)
+            lbl_sz.add_css_class("spook-note")
+            meta.append(lbl_sz)
+            info.append(meta)
+            card.append(info)
+            btn = Gtk.Button(label="\u2197")
+            btn.add_css_class("spook-btn")
+            btn.add_css_class("spook-msi-btn")
+            btn.connect("clicked", lambda _, n=nome, t=tipo: self._abrir_galeria_item(n, t))
+            card.append(btn)
+            self.galeria_box.append(card)
+        if visiveis == 0:
+            lbl = Gtk.Label(
+                label="Nenhum arquivo na galeria" if not items else "Nenhum arquivo nesta categoria",
+                xalign=0,
+            )
+            lbl.add_css_class("spook-note")
+            self.galeria_box.append(lbl)
+
+    def _abrir_galeria_item(self, nome, tipo):
+        def _fazer():
+            path = self._baixar_midia_http(nome) or hub_store.baixar_midia(nome)
+            if path:
+                executar(["gio", "open", path])
+        self._bg(_fazer)
+
     def _hub_ai_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         hdr = Gtk.Box(spacing=8)
@@ -1042,6 +1389,7 @@ class SpookOverlay(Gtk.Application):
             dados = f.read()
         corpo = b""
         corpo += f'--{boundary}\r\nContent-Disposition: form-data; name="id"\r\n\r\n{str(uuid.uuid4())}\r\n'.encode()
+        corpo += f'--{boundary}\r\nContent-Disposition: form-data; name="from"\r\n\r\narch\r\n'.encode()
         corpo += f'--{boundary}\r\nContent-Disposition: form-data; name="tipo"\r\n\r\narquivo\r\n'.encode()
         corpo += f'--{boundary}\r\nContent-Disposition: form-data; name="texto"\r\n\r\n\r\n'.encode()
         corpo += f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{nome}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode()
@@ -1059,7 +1407,7 @@ class SpookOverlay(Gtk.Application):
         with urllib.request.urlopen(req, timeout=90) as r:
             r.read()
 
-    def _refresh_chat(self, fonte_espelho=None):
+    def _refresh_chat(self, fonte_espelho=None, force_scroll=False):
         # Reconciliar o cache vivo com o espelho local (fonte de verdade p/ msgs
         # que chegaram enquanto estava offline). Nao apaga o que o socket ja viu.
         if not self._socket_online:
@@ -1071,7 +1419,7 @@ class SpookOverlay(Gtk.Application):
         ordem = sorted(self._chat_msgs.values(), key=lambda m: m.get("ts", 0))
         ids_pendentes = hub_store.pendentes_ids()
         self._chat_last_merge = "p:{}".format(len(ordem))
-        GLib.idle_add(lambda: self._fill_chat(ordem, ids_pendentes))
+        GLib.idle_add(lambda: self._fill_chat(ordem, ids_pendentes, force_scroll))
 
     def _merge_chat_espelho(self):
         """Reconciliação periódica espelho -> cache vivo. Quando o socket do relay
@@ -1149,21 +1497,31 @@ class SpookOverlay(Gtk.Application):
 
     def _render_msg(self, msg, pend=False):
         """Roda fora da thread principal? NAO: chamado do idle. Monta o widget de 1 msg."""
-        quem = msg.get("from", "?").upper()
+        from_raw = (msg.get('from') or msg.get('autor') or '').lower()
+        quem = 'POCO' if from_raw == 'android' else 'ARCH' if from_raw == 'arch' else (msg.get('from') or msg.get('autor') or '?').upper()
         texto = msg.get("texto", "")
         arq = msg.get("arquivo", "")
         ts = hora(msg.get("ts", 0))
-        is_local = quem in ("ARCH", "PC")
         tipo = (msg.get("tipo") or "texto").lower()
         ext = (arq or "").rsplit(".", 1)[-1].lower() if arq else ""
 
         bolha = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        bolha.add_css_class("spook-msg-arch" if is_local else "spook-msg-phone")
+        if quem == 'ARCH':
+            bolha.add_css_class("spook-msg-arch")
+        elif quem == 'POCO':
+            bolha.add_css_class("spook-msg-phone")
+        else:
+            bolha.add_css_class("spook-msg-arch")
         bolha.set_hexpand(True)
         cab = Gtk.Label(label=f"{quem} · {ts}", xalign=0)
         cab.add_css_class("spook-note")
         cab.add_css_class("spook-msg-h")
-        cab.add_css_class("spook-msg-h-arch" if is_local else "spook-msg-h-phone")
+        if quem == 'ARCH':
+            cab.add_css_class("spook-msg-h-arch")
+        elif quem == 'POCO':
+            cab.add_css_class("spook-msg-h-phone")
+        else:
+            cab.add_css_class("spook-msg-h-arch")
         bolha.append(cab)
         if texto:
             lab = Gtk.Label(label=texto, xalign=0, wrap=True)
@@ -1181,9 +1539,10 @@ class SpookOverlay(Gtk.Application):
             elif t_imagem or ext in ("png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "avif"):
                 bolha.append(self._imagem_midia(nome))
             else:
-                arq_lab = Gtk.Label(label=f"\u2197 {nome}", xalign=0)
-                arq_lab.add_css_class("spook-loc")
-                bolha.append(arq_lab)
+                bot = Gtk.Button(label=f"\u2197 {nome}")
+                bot.add_css_class("spook-loc")
+                bot.connect("clicked", lambda *_a: self._bg(lambda: self._abrir_midia_baixada(nome)))
+                bolha.append(bot)
         bolha.append(self._rodape_msg(msg, pend))
         return bolha
 
@@ -1256,30 +1615,6 @@ class SpookOverlay(Gtk.Application):
 
         self._bg(_carregar)
         return caixa
-
-    def _auto_abrir_imagem(self, msg):
-        """Imagem enviada do CELULAR abre sozinha no viewer (sem precisar clicar).
-        Ignora as do proprio Arch (echo) e mensagens antigas do chat_lista."""
-        try:
-            if getattr(self, "_abertas_imagens", None) is None:
-                self._abertas_imagens = set()
-            mid = msg.get("id")
-            origem = (msg.get("from") or "android").lower()
-            if not mid or mid in self._abertas_imagens or origem in ("arch", "pc"):
-                return
-            arq = msg.get("arquivo") or ""
-            tipo = (msg.get("tipo") or "").lower()
-            nome = arq.rsplit("/", 1)[-1]
-            ext = nome.rsplit(".", 1)[-1].lower() if nome else ""
-            t_imagem = tipo in ("image", "imagem", "foto", "photo", "picture", "imagens") or ext in ("png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "avif")
-            if not t_imagem:
-                return
-            path = self._baixar_midia_http(nome) or hub_store.baixar_midia(nome)
-            if path:
-                self._abertas_imagens.add(mid)
-                executar(["gio", "open", path])
-        except Exception:
-            pass
 
     def _nome_app(self, pacote):
         """com.spotify.music -> MUSIC (o pacote cru no popup fica feio)."""
@@ -1360,13 +1695,14 @@ class SpookOverlay(Gtk.Application):
             pass
         return False
 
-    def _fill_chat(self, msgs, ids_pendentes=()):
+    def _fill_chat(self, msgs, ids_pendentes=(), force_scroll=False):
         # evita redraw desnecessario (era isso q fazia a tela "mexer" e re-baixar midia)
         fp = "{}|{}".format(
             "|".join("{}:{}:{}".format(m.get("id", ""), m.get("ts", 0), (m.get("texto") or "")[:24]) for m in msgs[-60:]),
             "|".join(sorted(ids_pendentes)),
         )
-        if fp == self._chat_last_draw:
+        # Se force_scroll=True, sempre redesenha e scrolla (nova mensagem remota)
+        if not force_scroll and fp == self._chat_last_draw:
             return
         self._chat_last_draw = fp
         self._clear(self.chat_box)
@@ -1374,18 +1710,28 @@ class SpookOverlay(Gtk.Application):
             row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
             row.append(self._render_msg(msg, msg.get("id") in ids_pendentes))
             self.chat_box.append(row)
-        self._scroll_chat_fim(force=bool(ids_pendentes))
+        self._scroll_chat_fim(force=force_scroll or bool(ids_pendentes))
 
     def _scroll_chat_fim(self, force=False):
         s = getattr(self, "chat_scroll", None)
         if s is None:
             return
-        v = s.get_vadjustment()
-        if v is None:
-            return
-        perto_do_fim = v.get_value() >= v.get_upper() - v.get_page_size() - 60
-        if force or perto_do_fim:
-            v.set_value(v.get_upper())
+
+        def _aplicar():
+            v = s.get_vadjustment()
+            if v is None:
+                return False
+            perto_do_fim = v.get_value() >= v.get_upper() - v.get_page_size() - 60
+            if force or perto_do_fim:
+                v.set_value(v.get_upper())
+            return False
+
+        # A altura nova do conteudo so existe DEPOIS que o GTK realoca os
+        # widgets. Setar o adjustment na mesma hora usava o "upper" antigo e
+        # nao rolava nada (o chat do overlay ficava parado na mensagem velha).
+        GLib.idle_add(_aplicar)
+        GLib.timeout_add(60, _aplicar)
+        GLib.timeout_add(250, _aplicar)
 
     def _copiar_texto(self, texto):
         disp = Gdk.Display.get_default()
@@ -1427,16 +1773,15 @@ class SpookOverlay(Gtk.Application):
             except Exception:
                 token = None
             self.sio = socketio.Client(reconnection=True, reconnection_attempts=10, reconnection_delay=2)
-            auth = {"token": token} if token else None
+            auth = {"token": token, "device": "overlay"} if token else None
             self.sio.connect(SOCKET_URL, auth=auth, wait_timeout=10)
 
             @self.sio.on("chat_nova")
             def on_chat_nova(msg):
                 if isinstance(msg, dict) and msg.get("id"):
                     self._chat_msgs[msg["id"]] = msg
-                self._bg(self._refresh_chat)
-                if isinstance(msg, dict) and msg.get("id"):
-                    self._auto_abrir_imagem(msg)
+                # Nova mensagem remota recebida: sempre rola pro fim (igual ao app Android)
+                self._bg(lambda: self._refresh_chat(force_scroll=True))
 
             @self.sio.on("chat_lista")
             def on_chat_lista(d):
@@ -1546,8 +1891,9 @@ class SpookOverlay(Gtk.Application):
         for t in tasks:
             tid = t.get("id")
             estado = bool(t.get("feito"))
-            criado_por = str(t.get("criado_por", "?")).upper() or "?"
-            is_local = criado_por in ("ARCH", "PC")
+            cp = str(t.get("criado_por", "")).lower()
+            criado_por = "POCO" if cp == "android" else (str(t.get("criado_por", "?")).upper() or "?")
+            is_local = cp == "android"
 
             bolha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
             bolha.add_css_class("spook-msg-arch" if is_local else "spook-msg-phone")

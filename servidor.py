@@ -20,6 +20,37 @@ import threading
 import time
 import subprocess
 import os
+import concurrent.futures
+
+def _ydotool_socket() -> str:
+    """Descobre onde o ydotoald realmente criou o socket.
+
+    Nesta maquina o servico roda com --socket-path=/tmp/.ydotool_socket, mas o
+    padrao do ydotool e $XDG_RUNTIME_DIR/.ydotool_socket. Se apontarmos para o
+    lugar errado o ydotool NAO reclama: sai com rc=0 e nao move nada — foi por
+    isso que o touchpad/teclado do app "nao funcionava".
+    """
+    candidatos = [
+        os.environ.get("YDOTOOL_SOCKET"),
+        "/tmp/.ydotool_socket",
+        f"{os.environ.get('XDG_RUNTIME_DIR', '/run/user/1000')}/.ydotool_socket",
+        os.path.expanduser("~/.ydotool_socket"),
+    ]
+    for c in candidatos:
+        try:
+            if c and os.path.exists(c):
+                return c
+        except Exception:
+            continue
+    return "/tmp/.ydotool_socket"
+
+
+YENV = os.environ.copy()
+YENV["YDOTOOL_SOCKET"] = _ydotool_socket()
+
+# Thread pool para comandos de input (fire-and-forget) — evita bloquear Socket.IO
+_input_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="spook-input")
+
 import ssl
 import base64
 import pty
@@ -98,7 +129,10 @@ def carregar_configuracao():
 
 
 CONFIGURACAO = carregar_configuracao()
-RELAY_URL = "http://100.70.88.101:5000"
+# O "relay" de hoje e' o hub do Redmi (app SPOOK SERVER, porta 5000). O nome
+# antigo (Oracle Relay) ficou nos prints e confundia: nao ha mais Oracle no
+# caminho do chat/tasks.
+HUB_URL = "http://100.79.55.68:5000"
 relay_bridge_sio = None
 FILEBROWSER_URL = CONFIGURACAO.get("FILEBROWSER_URL", "").rstrip("/")
 FILEBROWSER_USERNAME = CONFIGURACAO.get("FILEBROWSER_USERNAME", "")
@@ -706,9 +740,18 @@ def coletar_metricas():
 
 def emitir_metricas_periodicas():
     while True:
-        time.sleep(5)
-        metricas = coletar_metricas()
-        socketio.emit("metricas_notebook", metricas)
+        try:
+            time.sleep(5)
+            metricas = coletar_metricas()
+            socketio.emit("metricas_notebook", metricas)
+            # Também publica no Hub (bridge Arch->Hub)
+            try:
+                if relay_bridge_sio and getattr(relay_bridge_sio, 'connected', False):
+                    relay_bridge_sio.emit('metricas_notebook', metricas)
+            except Exception as e:
+                log.warning(f"bridge metricas_notebook falhou: {e}")
+        except Exception as e:
+            log.warning(f"emitir_metricas_periodicas: {e}")
 
 
 @socketio.on("connect")
@@ -779,16 +822,16 @@ def chat_enviar(dados):
         # Broadcast local (deduplicado por id)
         _emitir_chat_nova(msg)
 
-        # Envia para o Relay da Oracle se estivermos em modo Bridge
+        # Envia para o hub do Redmi se estivermos em modo Bridge
         # para que o celular receba instantaneamente
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
                 relay_bridge_sio.emit("chat_enviar", msg)
-                print(f"[BRIDGE] Mensagem encaminhada para Oracle: {msg['id']}", flush=True)
+                print(f"[BRIDGE] Mensagem encaminhada para o hub do Redmi: {msg['id']}", flush=True)
             else:
-                print(f"[BRIDGE] Alerta: Relay SIO não conectado. Não encaminhado.", flush=True)
+                print(f"[BRIDGE] Alerta: bridge SIO não conectada. Não encaminhado.", flush=True)
         except Exception as e:
-            print(f"[BRIDGE] Falha ao encaminhar para Oracle: {e}", flush=True)
+            print(f"[BRIDGE] Falha ao encaminhar para o hub do Redmi: {e}", flush=True)
 
         print(f"[CHAT] {origem.upper()}: {texto[:60]}", flush=True)
     except Exception as e:
@@ -802,7 +845,7 @@ def chat_apagar(dados):
         ok = hub_store.apagar_mensagem(msg_id)
         if ok:
             emit("chat_apagada", {"id": msg_id}, broadcast=True)
-            # Avisa Oracle
+            # Avisa o hub do Redmi
             try:
                 if relay_bridge_sio and relay_bridge_sio.connected:
                     relay_bridge_sio.emit("chat_apagar", {"id": msg_id})
@@ -827,7 +870,7 @@ def task_criar(dados):
     try:
         nova, lista = hub_store.criar_task(titulo)
         emit("task_nova", nova, broadcast=True)
-        # Avisa Oracle
+        # Avisa o hub do Redmi
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
                 relay_bridge_sio.emit("task_nova", {"titulo": titulo})
@@ -846,7 +889,7 @@ def task_atualizar(dados):
         lista = hub_store.marcar_task(tid, feito)
         t = next((x for x in lista if x.get("id") == tid), {})
         emit("task_atualizada", t, broadcast=True)
-        # Avisa Oracle
+        # Avisa o hub do Redmi
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
                 relay_bridge_sio.emit("task_atualizada", {"id": tid, "feito": feito})
@@ -861,7 +904,7 @@ def task_apagar(dados):
     try:
         hub_store.apagar_task(tid)
         emit("task_apagada", {"id": tid}, broadcast=True)
-        # Avisa Oracle
+        # Avisa o hub do Redmi
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
                 relay_bridge_sio.emit("task_apagada", {"id": tid})
@@ -1583,12 +1626,13 @@ def _ydotool_rodavel():
     Sem o socket ele NAO dá erro: Sai com rc=0 e nao faz nada — por isso o
     touchpad/teclado "nao mexiam" e nao parecia bug. Aqui avisamos de vez.
     """
-    if os.path.exists("/tmp/.ydotool_socket"):
+    socket_path = YENV.get("YDOTOOL_SOCKET", "")
+    if socket_path and os.path.exists(socket_path):
         return True
     if not getattr(_ydotool_rodavel, "_avisou", False):
         _ydotool_rodavel._avisou = True
         msg = ("ydotool SEM ydotoald: inicie com "
-               "'sudo systemctl enable --now ydotoald' (uinput/root)")
+               "'systemctl --user enable --now ydotool' (uinput/user)")
         print(f"[PC_TECLADO] {msg}", flush=True)
         emit("resultado_comando", {"ok": False, "erro": msg})
     return False
@@ -1601,17 +1645,42 @@ def pc_teclado(dados):
         if tipo == "texto":
             texto = dados.get("texto", "")
             if texto:
-                subprocess.run(["wtype", texto], timeout=5, check=False)
+                def _t():
+                    try:
+                        subprocess.run(["wtype", texto], timeout=5, check=False)
+                    except Exception:
+                        pass
+                _input_executor.submit(_t)
         elif not _ydotool_rodavel():
             return
         elif tipo == "backspace":
-            subprocess.run(["ydotool", "key", "14:1", "14:0"], timeout=3, check=False)
+            def _t():
+                try:
+                    subprocess.run(["ydotool", "key", "14:1", "14:0"], timeout=3, check=False, env=YENV)
+                except Exception:
+                    pass
+            _input_executor.submit(_t)
         elif tipo == "enter":
-            subprocess.run(["ydotool", "key", "28:1", "28:0"], timeout=3, check=False)
+            def _t():
+                try:
+                    subprocess.run(["ydotool", "key", "28:1", "28:0"], timeout=3, check=False, env=YENV)
+                except Exception:
+                    pass
+            _input_executor.submit(_t)
         elif tipo == "tab":
-            subprocess.run(["ydotool", "key", "15:1", "15:0"], timeout=3, check=False)
+            def _t():
+                try:
+                    subprocess.run(["ydotool", "key", "15:1", "15:0"], timeout=3, check=False, env=YENV)
+                except Exception:
+                    pass
+            _input_executor.submit(_t)
         elif tipo == "esc":
-            subprocess.run(["ydotool", "key", "1:1", "1:0"], timeout=3, check=False)
+            def _t():
+                try:
+                    subprocess.run(["ydotool", "key", "1:1", "1:0"], timeout=3, check=False, env=YENV)
+                except Exception:
+                    pass
+            _input_executor.submit(_t)
     except Exception as e:
         emit("resultado_comando", {"ok": False, "erro": str(e)})
 
@@ -1628,14 +1697,31 @@ def pc_touchpad(dados):
             dx = dados.get("dx", 0)
             dy = dados.get("dy", 0)
             if dx or dy:
-                subprocess.run(["ydotool", "mousemove", "-x", str(dx), "-y", str(dy)], timeout=3, check=False)
+                def _m():
+                    try:
+                        # Movimento relativo (padrão do ydotool)
+                        subprocess.run(["ydotool", "mousemove", "-x", str(dx), "-y", str(dy)],
+                                       timeout=3, check=False, env=YENV)
+                    except Exception:
+                        pass
+                _input_executor.submit(_m)
         elif tipo == "clique":
             code = {"esquerdo": "0xC0", "direito": "0xC1", "medio": "0xC2"}.get(dados.get("botao", "esquerdo"), "0xC0")
-            subprocess.run(["ydotool", "click", code], timeout=3, check=False)
+            def _c():
+                try:
+                    subprocess.run(["ydotool", "click", code], timeout=3, check=False, env=YENV)
+                except Exception:
+                    pass
+            _input_executor.submit(_c)
         elif tipo == "scroll":
             dy = dados.get("dy", 0)
             if dy:
-                subprocess.run(["ydotool", "mousemove", "-w", "0", str(dy)], timeout=3, check=False)
+                def _s():
+                    try:
+                        subprocess.run(["ydotool", "mousemove", "-w", "0", str(dy)], timeout=3, check=False, env=YENV)
+                    except Exception:
+                        pass
+                _input_executor.submit(_s)
     except Exception as e:
         emit("resultado_comando", {"ok": False, "erro": str(e)})
 
@@ -1686,7 +1772,7 @@ def iniciar_sessao_pty():
 def ler_saida_pty(fd):
     while True:
         try:
-            pronto, _, _ = select.select([fd], [], [], 1)
+            pronto, _, _ = select.select([fd], [], [], 0.10)
             if fd in pronto:
                 dados = os.read(fd, 4096)
                 if not dados: break
@@ -1709,16 +1795,20 @@ def monitorar_clipboard():
 
 
 def iniciar_relay_bridge():
-    """Conecta este servidor Arch ao Oracle Relay como um cliente para sincronismo instantâneo."""
+    """Conecta este servidor Arch ao hub do Redmi como cliente, para sincronismo instantaneo."""
     global relay_bridge_sio
     import socketio as sio_client
-    print(f"[BRIDGE] Iniciando conexão com Oracle Relay em {RELAY_URL}...", flush=True)
+    print(f"[BRIDGE] Iniciando conexão com o hub do Redmi em {HUB_URL}...", flush=True)
     sio = sio_client.Client(reconnection_delay=5, reconnection_delay_max=30)
     relay_bridge_sio = sio
     token = obter_token_sessao()
     @sio.on("connect")
     def on_connect():
-        print(f"[BRIDGE] Conectado ao Oracle Relay: {RELAY_URL}", flush=True)
+        print(f"[BRIDGE] Conectado ao hub do Redmi: {HUB_URL}", flush=True)
+        try:
+            sio.emit("info_arch", coletar_info_servidor())
+        except Exception as e:
+            print(f"[BRIDGE] info_arch falhou: {e}", flush=True)
     @sio.on("chat_nova")
     def on_chat_nova(dados):
         if dados.get("from") != "arch":
@@ -1790,7 +1880,7 @@ def iniciar_relay_bridge():
         while True:
             try:
                 if not sio.connected:
-                    sio.connect(RELAY_URL, auth={"token": token})
+                    sio.connect(HUB_URL, auth={"token": token})
                 sio.wait()
             except Exception as e:
                 print(f"[BRIDGE ERRO] {e}", flush=True)
