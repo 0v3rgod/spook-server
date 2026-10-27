@@ -1716,12 +1716,19 @@ class SpookOverlay(Gtk.Application):
         s = getattr(self, "chat_scroll", None)
         if s is None:
             return
+        v0 = s.get_vadjustment()
+        if v0 is None:
+            return
+        # Decide AGORA, com a geometria ANTES da mensagem nova entrar. Se isso
+        # for calculado no _aplicar (depois do relayout) o "perto do fim" ja'
+        # virou falso para qualquer mensagem maior que 60 px -> o chat ficava
+        # parado na mensagem velha.
+        perto_do_fim = v0.get_value() >= v0.get_upper() - v0.get_page_size() - 60
 
         def _aplicar():
             v = s.get_vadjustment()
             if v is None:
                 return False
-            perto_do_fim = v.get_value() >= v.get_upper() - v.get_page_size() - 60
             if force or perto_do_fim:
                 v.set_value(v.get_upper())
             return False
