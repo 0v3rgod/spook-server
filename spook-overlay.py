@@ -26,6 +26,7 @@ if str(BASE) not in sys.path:
 
 import hub_store
 from spook_leitor import SpookLeitorManager
+from spook_pad import SpookPadManager
 
 BATERIA_CELULAR = Path("/tmp/bateria_celular.txt")
 CELULAR_STATUS = Path("/tmp/celular_status.json")
@@ -516,7 +517,16 @@ class SpookOverlay(Gtk.Application):
         tabs.append_page(self._pagina_home(), Gtk.Label(label="HOME"))
         tabs.append_page(self._pagina_hub(), Gtk.Label(label="CHAT"))
         self.leitor_mgr = SpookLeitorManager(self)
-        tabs.append_page(self.leitor_mgr.criar_pagina(), Gtk.Label(label="READER"))
+        pagina_leitor = self.leitor_mgr.criar_pagina()
+        tabs.append_page(pagina_leitor, Gtk.Label(label="READER"))
+        # PAD: notas cross-device (robô: relay -> gdrive:SPOOK/pad)
+        self.pad_mgr = SpookPadManager(self)
+        pagina_pad = self.pad_mgr.criar_pagina()
+        tabs.append_page(pagina_pad, Gtk.Label(label="PAD"))
+        self._pagina_leitor = pagina_leitor
+        self._pagina_pad = pagina_pad
+        self._tabs = tabs
+        tabs.connect("switch-page", self._ao_trocar_aba)
         raiz.append(tabs)
         self._init_socketio()
 
@@ -528,6 +538,14 @@ class SpookOverlay(Gtk.Application):
         teclado = Gtk.EventControllerKey()
         teclado.connect("key-pressed", self._tecla)
         janela.add_controller(teclado)
+
+    def _ao_trocar_aba(self, _nb, pagina, _indice):
+        # entrar na aba PAD ja' mostra o estado mais novo (o poll de 20 s cobre o resto)
+        try:
+            if pagina is self._pagina_pad:
+                self.pad_mgr.sincronizar()
+        except Exception:
+            pass
 
     def _tecla(self, _ctrl, keyval, _code, _state):
         if keyval == Gdk.KEY_Escape:
