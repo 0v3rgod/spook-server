@@ -576,7 +576,12 @@ class SpookPadManager:
                 pendentes = [n["id"] for n in self.notas.values() if n.get("pendente")]
                 pendentes_antes = len(pendentes)
             for nid in pendentes:
-                self._empurrar(nid)
+                with self._lock:
+                    removida = bool((self.notas.get(nid) or {}).get("removido"))
+                if removida:
+                    self._apagar_remoto(nid)
+                else:
+                    self._empurrar(nid)
         except Exception as e:
             self._erro = str(e)[:80]
         finally:
@@ -940,6 +945,10 @@ class SpookPadManager:
             n = self.notas.get(self.ed_id or "")
             if not n:
                 return
+            if n.get("removido") and not self.ed_sujo:
+                # apagaram a nota no celular enquanto eu olhava: sai da tela
+                GLib.idle_add(lambda: (self._fechar_editor(), False)[1])
+                return
             titulo, texto = n.get("titulo", ""), n.get("texto", "")
             versao, em = _int(n.get("versao"), 1), _int(n.get("em"))
         if self.ed_titulo.get_text() != titulo:
@@ -1134,8 +1143,13 @@ class SpookPadManager:
         raiz.append(linha)
         win.present()
 
-    def _apagar_thread(self, nid):
+    def _apagar_remoto(self, nid):
         res = self._http("DELETE", f"/pad/{nid}?device={DEVICE_ID}", timeout=15)
         if res and res.get("ok") and res.get("nota"):
             self.marcar_enviada(nid, res["nota"])
+            return True
+        return False
+
+    def _apagar_thread(self, nid):
+        self._apagar_remoto(nid)
         GLib.idle_add(self._pos_sync)
