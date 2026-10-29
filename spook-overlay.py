@@ -43,56 +43,49 @@ ICON = ICON_ROUND if ICON_ROUND.exists() else Path.home() / ".local/share/icons/
 AI_URL = "http://100.70.88.101:5000/ia"
 
 CSS = """
-window.spook { background: #0B0A12; color: #F4F1FF; }
+window.spook {
+  background: #0B0A12; color: #F4F1FF;
+  font-family: "Roboto", "Noto Sans", sans-serif;
+  font-size: 14px;
+}
 .spook-root { background: #0B0A12; padding: 16px; }
-.spook-title { font-size: 15px; font-weight: 700; color: #FF4D9A; }
-.spook-sub { font-size: 11px; color: #B8B4C8; }
+.spook-neon {
+  background-image: linear-gradient(to right, #FF4D9A, #B44AFF 38%, #5CE1E6 72%, #9CFF57 90%, rgba(156, 255, 87, 0));
+  border-radius: 2px;
+}
+.spook-title { font-size: 20px; font-weight: 700; color: #FF4D9A; }
+.spook-sub { font-size: 12px; color: #B8B4C8; }
 .spook-status {
   font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
   font-size: 11px; font-weight: 700;
 }
-.spook-card {
-  background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
-  padding: 14px 16px;
-}
-.spook-gal-image { border-left: 4px solid #FF7A45; }
-.spook-gal-video { border-left: 4px solid #B44AFF; }
-.spook-gal-audio { border-left: 4px solid #5CE1E6; }
-.spook-gal-file  { border-left: 4px solid #9AA4B2; }
-.spook-gal-badge { font-size: 9px; font-weight: 700; border-radius: 6px; padding: 1px 6px; }
-.spook-gal-badge-all   { color: #FF4D9A; background-color: rgba(255,77,154,0.22); }
-.spook-gal-badge-image { color: #FF7A45; background-color: rgba(255,122,69,0.16); }
-.spook-gal-badge-video { color: #B44AFF; background-color: rgba(180,74,255,0.16); }
-.spook-gal-badge-audio { color: #5CE1E6; background-color: rgba(92,225,230,0.16); }
-.spook-gal-badge-file  { color: #9AA4B2; background-color: rgba(154,164,178,0.16); }
-button.spook-gal-filter {
-  background-image: none; background-color: transparent; box-shadow: none;
-  color: #8A8F98; border: 1px solid #2A2736; border-radius: 8px;
-  padding: 3px 10px; font-size: 10px; font-weight: 700;
-  min-height: 0; min-width: 0; transition: all 140ms ease;
-}
-button.spook-gal-filter:hover { color: #F4F1FF; border-color: #6E6A81; }
-button.spook-gal-filter-all-on   { color: #FF4D9A; border-color: #FF4D9A; background-color: rgba(255,77,154,0.18); }
-button.spook-gal-filter-image-on { color: #FF7A45; border-color: #FF7A45; background-color: rgba(255,122,69,0.18); }
-button.spook-gal-filter-video-on { color: #B44AFF; border-color: #B44AFF; background-color: rgba(180,74,255,0.18); }
-button.spook-gal-filter-audio-on { color: #5CE1E6; border-color: #5CE1E6; background-color: rgba(92,225,230,0.18); }
-button.spook-gal-filter-file-on  { color: #9AA4B2; border-color: #9AA4B2; background-color: rgba(154,164,178,0.18); }
-.spook-rich-card {
-  background: #16141F; border-radius: 18px; border: 1px solid #2A2736;
+.spook-card, .spook-rich-card {
+  background: #16141F; border-radius: 18px; border: 1px solid #3A3648;
   padding: 16px 18px;
 }
-.spook-metric-ico { font-size: 15px; color: #5CE1E6; }
+.spook-card-title { font-size: 12px; font-weight: 700; color: #5CE1E6; }
+.spook-metric {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 12px; font-weight: 500; color: #F4F1FF;
+}
+.spook-note { font-size: 11px; color: #B8B4C8; }
+.spook-loc { font-size: 13px; color: #F4F1FF; }
+.spook-ok { color: #5CE1E6; }
+.spook-warn { color: #FF7A45; }
+.spook-err { color: #FF5C6C; }
+.spook-card-android { border: 1px solid rgba(255, 77, 154, 0.35); }
+.spook-card-arch { border: 1px solid rgba(92, 225, 230, 0.32); }
+
 .spook-msi {
   font-family: "Material Symbols Rounded";
-  font-size: 16px;
+  font-size: 17px;
+  color: #5CE1E6;
   background-color: #1E1C2A;
-  border: 1px solid #2A2736;
-  border-radius: 20px; padding: 4px;
-  min-width: 24px; min-height: 24px;
+  border: 1px solid #3A3648;
+  border-radius: 10px;
+  padding: 5px;
+  min-width: 20px; min-height: 20px;
 }
-.spook-card-title { font-size: 11px; font-weight: 700; color: #5CE1E6; }
-.spook-card-android { border: 1px solid #3A3648; }
-.spook-card-arch { border: 1px solid #3A3648; }
 .spook-card-android .spook-msi {
   color: #FF4D9A; background-color: rgba(255, 77, 154, 0.14);
   border-color: rgba(255, 77, 154, 0.35);
@@ -109,35 +102,52 @@ button.spook-gal-filter-file-on  { color: #9AA4B2; border-color: #9AA4B2; backgr
   color: #5CE1E6; background-color: rgba(92, 225, 230, 0.12);
   border-color: rgba(92, 225, 230, 0.32);
 }
-.spook-ok { color: #5CE1E6; }
-.spook-warn { color: #FF7A45; }
-.spook-err { color: #FF5C6C; }
-.spook-metric { font-size: 12px; color: #F4F1FF; }
-.spook-note { font-size: 11px; color: #B8B4C8; }
-.spook-loc { font-size: 13px; color: #F4F1FF; }
+
+.spook-gal-image { border-left: 4px solid #FF7A45; }
+.spook-gal-video { border-left: 4px solid #B44AFF; }
+.spook-gal-audio { border-left: 4px solid #5CE1E6; }
+.spook-gal-file  { border-left: 4px solid #9AA4B2; }
+.spook-gal-badge { font-size: 10px; font-weight: 700; border-radius: 8px; padding: 1px 7px; }
+.spook-gal-badge-all   { color: #FF4D9A; background-color: rgba(255,77,154,0.22); }
+.spook-gal-badge-image { color: #FF7A45; background-color: rgba(255,122,69,0.16); }
+.spook-gal-badge-video { color: #B44AFF; background-color: rgba(180,74,255,0.16); }
+.spook-gal-badge-audio { color: #5CE1E6; background-color: rgba(92,225,230,0.16); }
+.spook-gal-badge-file  { color: #9AA4B2; background-color: rgba(154,164,178,0.16); }
+button.spook-gal-filter {
+  background-image: none; background-color: transparent; box-shadow: none;
+  color: #8A8F98; border: 1px solid #3A3648; border-radius: 50px;
+  padding: 4px 12px; font-size: 11px; font-weight: 600;
+  min-height: 0; min-width: 0; transition: all 140ms ease;
+}
+button.spook-gal-filter:hover { color: #F4F1FF; border-color: #6E6A81; }
+button.spook-gal-filter-all-on   { color: #FF4D9A; border-color: #FF4D9A; background-color: rgba(255,77,154,0.18); }
+button.spook-gal-filter-image-on { color: #FF7A45; border-color: #FF7A45; background-color: rgba(255,122,69,0.18); }
+button.spook-gal-filter-video-on { color: #B44AFF; border-color: #B44AFF; background-color: rgba(180,74,255,0.18); }
+button.spook-gal-filter-audio-on { color: #5CE1E6; border-color: #5CE1E6; background-color: rgba(92,225,230,0.18); }
+button.spook-gal-filter-file-on  { color: #9AA4B2; border-color: #9AA4B2; background-color: rgba(154,164,178,0.18); }
+
 .spook-msg-arch {
   background: #16141F; border: 1px solid rgba(92, 225, 230, 0.45);
-  border-radius: 20px; padding: 12px 16px; margin: 4px 0;
+  border-radius: 18px; padding: 14px 16px; margin: 4px 0;
 }
 .spook-msg-phone {
   background: #211726; border: 1px solid rgba(255, 77, 154, 0.5);
-  border-radius: 20px; padding: 12px 16px; margin: 4px 0;
+  border-radius: 18px; padding: 14px 16px; margin: 4px 0;
 }
-.spook-msg-h { font-size: 10px; font-weight: 700; }
+.spook-msg-h { font-size: 11px; font-weight: 700; }
 .spook-msg-h-arch { color: #5CE1E6; }
 .spook-msg-h-phone { color: #FF4D9A; }
-.spook-msg-txt { font-size: 16px; color: #FFFFFF; font-weight: 600; }
-.spook-msg-txt.spook-tarefa-feita {
-  text-decoration: line-through; color: #8A8F98; font-weight: 500;
-}
+.spook-msg-txt { font-size: 14px; color: #FFFFFF; font-weight: 500; }
+
 button.spook-btn {
   background: #1E1C2A; color: #F4F1FF; border-radius: 22px;
-  border: 1px solid #3A3648; padding: 6px 14px; font-size: 11px;
-  transition: all 140ms ease;
+  border: 1px solid #3A3648; padding: 7px 16px; font-size: 12px;
+  font-weight: 600; transition: all 140ms ease;
 }
 button.spook-btn:hover { background: #2A2736; border-color: #6E6A81; }
 button.spook-btn:active { background: #16141F; }
 button.spook-btn:focus { outline: 2px solid #FF4D9A; outline-offset: 2px; }
+button.spook-btn.spook-msi-btn { padding: 6px 11px; }
 button.spook-accent {
   background: #FF4D9A; color: #0B0A12; border: none; font-weight: 700;
   transition: all 140ms ease;
@@ -147,14 +157,20 @@ button.spook-ok-btn { background: #5CE1E6; color: #0B0A12; border: none; font-we
 button.spook-warn-btn { background: #FF7A45; color: #0B0A12; border: none; font-weight: 700; }
 button.spook-err-btn { background: #FF5C6C; color: #0B0A12; border: none; font-weight: 700; }
 button.spook-tab {
-  background: transparent; color: #B8B4C8; padding: 8px 18px;
-  font-size: 11px; font-weight: 700; border: none; border-radius: 0;
-  transition: all 150ms ease;
+  background: transparent; background-image: none; color: #8A8F98;
+  padding: 6px 16px; font-size: 11px; font-weight: 700;
+  border: 1px solid #3A3648; border-radius: 999px;
+  box-shadow: none; outline: none; transition: all 150ms ease;
+}
+button.spook-tab:hover {
+  background: transparent; background-image: none; color: #F4F1FF;
+  border-color: #6E6A81; box-shadow: none; outline: none;
 }
 button.spook-tab-on {
-  background: transparent; color: #FF4D9A; padding: 8px 18px;
-  font-size: 11px; font-weight: 700; border: none; border-radius: 0;
-  border-bottom: 2px solid #FF4D9A;
+  background: rgba(255, 77, 154, 0.14); background-image: none; color: #FF4D9A;
+  padding: 6px 16px; font-size: 11px; font-weight: 700;
+  border: 1px solid rgba(255, 77, 154, 0.55); border-radius: 999px;
+  box-shadow: none; outline: none;
 }
 .spook-input {
   background: #16141F; color: #F4F1FF; border: 1px solid #3A3648;
@@ -171,7 +187,7 @@ button.spook-tab-on {
 .spook-scan-card:hover { background: #1E1C2A; border-color: #FF4D9A; }
 .spook-scan-section {
   font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
-  font-size: 10px; font-weight: 700; color: #5CE1E6;
+  font-size: 11px; font-weight: 700; color: #5CE1E6;
   padding: 10px 0 6px 0;
 }
 .spook-cmd-card {
@@ -180,11 +196,7 @@ button.spook-tab-on {
   transition: all 140ms ease;
 }
 .spook-cmd-card:hover { border-color: #FF4D9A; background: #1E1C2A; }
-.spook-msi-btn {
-  font-family: "Material Symbols Rounded";
-  font-size: 16px;
-  color: #5CE1E6;
-}
+.spook-msi-btn { font-family: "Material Symbols Rounded"; font-size: 16px; color: #5CE1E6; }
 .spook-msi-btn.spook-gal-ico-image { color: #FF7A45; }
 .spook-msi-btn.spook-gal-ico-video { color: #B44AFF; }
 .spook-msi-btn.spook-gal-ico-audio { color: #5CE1E6; }
@@ -193,19 +205,29 @@ button.spook-tab-on {
 .spook-msi-del { color: #FF5C6C; }
 .spook-msi-send { color: #FF4D9A; }
 .spook-msi-inline { font-family: "Material Symbols Rounded"; }
-.spook-btn-text { font-size: 11px; }
-.spook-btn-text-sm { font-size: 10px; }
+.spook-btn-text { font-size: 12px; font-weight: 600; }
+.spook-btn-text-sm { font-size: 11px; font-weight: 600; }
 .spook-cmd-danger { border-color: #FF5C6C; }
-notebook.spook-tabs > header { background: #0B0A12; }
-notebook.spook-tabs > header > tabs > tab {
-  background: transparent; color: #B8B4C8; padding: 8px 18px;
-  font-size: 11px; font-weight: 700; border: none;
-  transition: all 150ms ease;
+
+notebook.spook-tabs > stack { background: #0B0A12; }
+notebook.spook-tabs > stack > * { background: transparent; }
+scrolledwindow, scrolledwindow > viewport { background: transparent; }
+notebook.spook-tabs > header {
+  background: #0B0A12;
+  border-bottom: 1px solid #2A2736;
 }
-notebook.spook-tabs > header > tabs > tab:hover { color: #F4F1FF; }
+notebook.spook-tabs > header > tabs > tab {
+  background: transparent; background-image: none; color: #B8B4C8;
+  padding: 10px 20px; font-size: 12px; font-weight: 700; border: none;
+  box-shadow: none; transition: all 150ms ease;
+}
+notebook.spook-tabs > header > tabs > tab:hover {
+  background: transparent; background-image: none; color: #F4F1FF;
+  box-shadow: none;
+}
 notebook.spook-tabs > header > tabs > tab:checked {
-  background: transparent; color: #FF4D9A;
-  border-bottom: 2px solid #FF4D9A;
+  background: transparent; background-image: none; color: #FF4D9A;
+  border-bottom: 2px solid #FF4D9A; box-shadow: none; outline: none;
 }
 scrollbar { background-color: transparent; border: none; }
 scrollbar slider {
@@ -389,9 +411,9 @@ class SpookOverlay(Gtk.Application):
     def __init__(self):
         super().__init__(application_id="com.taylor.spook.overlay")
         self._chat_msgs = {}   # id -> msg (cache vivo; socket + espelho reconciliam)
+        self._tasks_cache = {}   # id -> task (socket do relay; o PAD desenha)
         self._chat_last_merge = ""
         self._chat_last_draw = ""
-        self._tasks_cache = {}   # id -> task (cache vivo vindo do socket do relay)
         self._socket_online = False
         self._presenca_celular = False  # celular com socket ativo no servidor (via rede, nao adb USB)
         self.arch_status_label = Gtk.Label(xalign=0)
@@ -435,7 +457,6 @@ class SpookOverlay(Gtk.Application):
         self.chat_status_label = Gtk.Label(xalign=1, label="")
         self.chat_status_label.add_css_class("spook-note")
         self.chat_entry = None
-        self.tasks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.scan_output_label = Gtk.Label(xalign=0, wrap=True)
         self.scan_output_label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.cmd_output_label = Gtk.Label(xalign=0, wrap=True)
@@ -456,7 +477,9 @@ class SpookOverlay(Gtk.Application):
         display = Gdk.Display.get_default()
         css = Gtk.CssProvider()
         css.load_from_data(CSS.encode())
-        Gtk.StyleContext.add_provider_for_display(display, css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        Gtk.StyleContext.add_provider_for_display(
+            display, css, Gtk.STYLE_PROVIDER_PRIORITY_USER + 10
+        )
 
         janela = Gtk.ApplicationWindow(application=self)
         janela.set_title("SPOOK")
@@ -495,6 +518,11 @@ class SpookOverlay(Gtk.Application):
         cabeca.append(status)
         raiz.append(cabeca)
 
+        fio = Gtk.Box()
+        fio.add_css_class("spook-neon")
+        fio.set_size_request(-1, 2)
+        raiz.append(fio)
+
         # tornar a janela arrastável clicando no cabeçalho
         # (GTK4 não tem gtk_window_begin_move; arraste manual via janela.move)
         drag_origem = {}
@@ -514,15 +542,31 @@ class SpookOverlay(Gtk.Application):
         tabs = Gtk.Notebook()
         tabs.add_css_class("spook-tabs")
         tabs.set_vexpand(True)
-        tabs.append_page(self._pagina_home(), Gtk.Label(label="HOME"))
-        tabs.append_page(self._pagina_hub(), Gtk.Label(label="CHAT"))
+
+        # Abas com ícones SVG (estilo Android bottom nav)
+        def _aba_icone_texto(icone_nome, texto):
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            img = self._icone_svg(icone_nome, 16)
+            box.append(img)
+            lbl = Gtk.Label(label=texto)
+            box.append(lbl)
+            return box
+
+        tabs.append_page(self._pagina_home(), _aba_icone_texto("notebook", "HOME"))
+        pagina_hub = self._pagina_hub()
+        self._pagina_hub_widget = pagina_hub
+        tabs.append_page(pagina_hub, _aba_icone_texto("chat", "CHAT"))
         self.leitor_mgr = SpookLeitorManager(self)
         pagina_leitor = self.leitor_mgr.criar_pagina()
-        tabs.append_page(pagina_leitor, Gtk.Label(label="READER"))
+        tabs.append_page(pagina_leitor, _aba_icone_texto("book", "READER"))
         # PAD: notas cross-device (robô: relay -> gdrive:SPOOK/pad)
         self.pad_mgr = SpookPadManager(self)
+        self.pad_mgr.task_listar_cb = self._tarefas_pedir
+        self.pad_mgr.task_add_cb = self._tarefa_adicionar
+        self.pad_mgr.task_toggle_cb = self._tarefa_marcar
+        self.pad_mgr.task_del_cb = self._tarefa_apagar
         pagina_pad = self.pad_mgr.criar_pagina()
-        tabs.append_page(pagina_pad, Gtk.Label(label="PAD"))
+        tabs.append_page(pagina_pad, _aba_icone_texto("note", "PAD"))
         self._pagina_leitor = pagina_leitor
         self._pagina_pad = pagina_pad
         self._tabs = tabs
@@ -544,6 +588,13 @@ class SpookOverlay(Gtk.Application):
         try:
             if pagina is self._pagina_pad:
                 self.pad_mgr.sincronizar()
+                self.pad_mgr.pedir_tarefas()
+        except Exception:
+            pass
+        # o chat abre sempre na mensagem mais nova
+        try:
+            if pagina is getattr(self, "_pagina_hub_widget", None):
+                self._scroll_chat_fim(force=True)
         except Exception:
             pass
 
@@ -682,6 +733,24 @@ class SpookOverlay(Gtk.Application):
         btn.set_child(box)
         return btn
 
+    def _icone_svg(self, nome, tamanho=18):
+        """Carrega um ícone SVG dos assets SPOOK (para abas de navegação)."""
+        path = Path.home() / ".local/share/icons/spook" / f"{nome}.svg"
+        try:
+            img = Gtk.Image.new_from_file(str(path))
+            img.set_pixel_size(tamanho)
+            return img
+        except Exception:
+            return Gtk.Label(label="")
+
+    def _icone_metric(self, chave, tamanho=18):
+        """Cria um label com ícone Material Symbols para métricas (como no app Android)."""
+        ic = Gtk.Label(label=self._MSI.get(chave, "\ue322"))
+        ic.add_css_class("spook-msi")
+        return ic
+
+    # Ícones de métricas usam Material Symbols (igual ao app Android)
+    # Ícones de navegação (abas) usam SVGs customizados da SPOOK
     _MSI = {
         "bat": "\ue1a5",
         "ram": "\ue322",
@@ -689,12 +758,22 @@ class SpookOverlay(Gtk.Application):
         "cpu": "\ue30d",
         "temp": "\ue1ff",
         "load": "\ue9e4",
-        "loc": "\ue0c8",  # Material Symbols "place" (pin). U+E1DB era "storage"
-        "server": "\ue2bd",  # "cloud" (header do card SPOOK SERVER)
-        "hub": "\ue875",     # "dns" (servidor)
-        "status": "\ue63e",  # "wifi"
-        "report": "\ue873",  # "description" (documento)
-        "media": "\ue413",   # "photo_library"
+        "loc": "\ue0c8",  # Material Symbols "place" (pin)
+        "server": "\ue2bd",
+        "hub": "\ue875",
+        "status": "\ue63e",
+        "report": "\ue873",
+        "media": "\ue413",
+    }
+
+    _NAV_ICONS = {
+        "home": "notebook",    # HOME = notebook (notebook+celular no app)
+        "chat": "chat",        # CHAT = nuvem de conversa
+        "reader": "book",      # READER = livro
+        "pad": "note",         # PAD = nota
+        "galeria": "media",    # GALERIA = mídia
+        "ghost": "ghost",      # SCANS = fantasminha
+        "robot": "robot",      # IA = robozinho
     }
 
     def _rich_card(self, titulo, status_label, linhas, acento_css=""):
@@ -708,16 +787,18 @@ class SpookOverlay(Gtk.Application):
         caixa.append(status_label)
         for chave, texto_widget in linhas:
             item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            ic = Gtk.Label(label=self._MSI.get(chave, "\ue322"))
-            ic.add_css_class("spook-msi")
+            ic = self._icone_metric(chave)
             if isinstance(texto_widget, str):
                 tx = Gtk.Label(label=texto_widget, xalign=0)
                 tx.add_css_class("spook-metric")
+                tx.set_hexpand(True)
                 item.append(ic)
                 item.append(tx)
             else:
                 item.append(ic)
+                texto_widget.add_css_class("spook-metric")
                 item.append(texto_widget)
+            item.set_hexpand(True)
             caixa.append(item)
         return caixa
 
@@ -766,8 +847,7 @@ class SpookOverlay(Gtk.Application):
         card.add_css_class("spook-card-arch")
 
         hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        ic = Gtk.Label(label=self._MSI["hub"])
-        ic.add_css_class("spook-msi")
+        ic = self._icone_metric("hub")
         ic.add_css_class("spook-msi-arch")
         hdr.append(ic)
         titulo = Gtk.Label(label="ORACLE RELAY", xalign=0)
@@ -791,8 +871,7 @@ class SpookOverlay(Gtk.Application):
         grade.set_margin_top(8)
         for chave, nome, lbl_valor in linhas:
             linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            ic = Gtk.Label(label=self._MSI.get(chave, "\ue322"))
-            ic.add_css_class("spook-msi")
+            ic = self._icone_metric(chave)
             linha.append(ic)
             col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             nm = Gtk.Label(label=nome, xalign=0)
@@ -853,7 +932,7 @@ class SpookOverlay(Gtk.Application):
         return True
 
     def _atualizar_oracle_relay(self):
-        """Consulta /media e /relatorios do Oracle Relay."""
+        """Queries /media and /relatorios on the Oracle Relay."""
         self._refrescar_status_relay()
 
         def _fazer():
@@ -1004,12 +1083,18 @@ class SpookOverlay(Gtk.Application):
 
     def _pagina_commands(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        box.append(Gtk.Label(label="Commands", xalign=0, css_name="spook-title"))
-        box.append(Gtk.Label(label="Execute system commands on Arch.", xalign=0, css_name="spook-note"))
+        lb = Gtk.Label(label="Commands", xalign=0)
+        lb.add_css_class("spook-title")
+        box.append(lb)
+        lb = Gtk.Label(label="Execute system commands on Arch.", xalign=0)
+        lb.add_css_class("spook-note")
+        box.append(lb)
 
         media_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         media_card.add_css_class("spook-card")
-        media_card.append(Gtk.Label(label="MEDIA PLAYER", xalign=0, css_name="spook-card-title"))
+        lb = Gtk.Label(label="MEDIA PLAYER", xalign=0)
+        lb.add_css_class("spook-card-title")
+        media_card.append(lb)
         media_row = Gtk.Box(spacing=6)
         for label, glyph, cmd in MEDIA_COMMANDS:
             btn = self._btn_icone(glyph, label)
@@ -1021,7 +1106,9 @@ class SpookOverlay(Gtk.Application):
 
         net_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         net_card.add_css_class("spook-card")
-        net_card.append(Gtk.Label(label="NETWORK INFO", xalign=0, css_name="spook-card-title"))
+        lb = Gtk.Label(label="NETWORK INFO", xalign=0)
+        lb.add_css_class("spook-card-title")
+        net_card.append(lb)
         net_grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         for label, glyph, cmd in NETWORK_COMMANDS:
             row = Gtk.Box(spacing=6)
@@ -1043,7 +1130,9 @@ class SpookOverlay(Gtk.Application):
 
         sys_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         sys_card.add_css_class("spook-card")
-        sys_card.append(Gtk.Label(label="SYSTEM", xalign=0, css_name="spook-card-title"))
+        lb = Gtk.Label(label="SYSTEM", xalign=0)
+        lb.add_css_class("spook-card-title")
+        sys_card.append(lb)
         sys_grid = Gtk.Box(spacing=8)
         for label, glyph, cmd, danger in SYSTEM_COMMANDS:
             btn = self._btn_icone(glyph, label, texto_css="spook-btn-text-sm")
@@ -1072,30 +1161,27 @@ class SpookOverlay(Gtk.Application):
 
     def _pagina_hub(self):
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        tab_bar = Gtk.Box(spacing=2)
+        tab_bar = Gtk.Box(spacing=8)
         self.hub_sub_tabs = {}
         self.hub_pages = Gtk.Stack()
         self.hub_pages.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         pages = [
-            ("chat", "CHAT", None),
-            ("tasks", None, "\ue9de"),
-            ("galeria", None, "\ue413"),
+            ("chat", "CHAT", "chat"),
+            ("galeria", "GALERIA", "media"),
         ]
-        for key, label, glyph in pages:
-            if glyph:
-                btn = Gtk.Button()
-                ic = Gtk.Label(label=glyph)
-                ic.add_css_class("spook-msi-btn")
-                btn.set_child(ic)
-                btn.set_tooltip_text(label)
-            else:
-                btn = Gtk.Button(label=label)
+        for key, label, icon_name in pages:
+            btn = Gtk.Button()
+            box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            img = self._icone_svg(icon_name, 16)
+            box.append(img)
+            lbl = Gtk.Label(label=label)
+            box.append(lbl)
+            btn.set_child(box)
             btn.add_css_class("spook-tab" if key != "chat" else "spook-tab-on")
             self.hub_sub_tabs[key] = btn
             tab_bar.append(btn)
 
         self.hub_pages.add_named(self._hub_chat_page(), "chat")
-        self.hub_pages.add_named(self._hub_tasks_page(), "tasks")
         self.hub_pages.add_named(self._hub_galeria_page(), "galeria")
 
         def switch_tab(key):
@@ -1116,7 +1202,8 @@ class SpookOverlay(Gtk.Application):
     def _hub_chat_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         hdr = Gtk.Box(spacing=8)
-        titulo = Gtk.Label(label="Arch ↔ Phone", xalign=0, css_name="spook-card-title")
+        titulo = Gtk.Label(label="Arch ↔ Phone", xalign=0)
+        titulo.add_css_class("spook-card-title")
         titulo.set_hexpand(True)
         hdr.append(titulo)
         hdr.append(self.chat_status_label)
@@ -1136,49 +1223,18 @@ class SpookOverlay(Gtk.Application):
         file_btn = Gtk.Button(label="\ue226")
         file_btn.add_css_class("spook-btn")
         file_btn.add_css_class("spook-msi-btn")
-        file_btn.set_tooltip_text("Enviar arquivo")
+        file_btn.set_tooltip_text("Attach file")
         file_btn.connect("clicked", lambda *_: self._escolher_arquivo(self._upload_chat))
         send_btn = Gtk.Button(label="\ue163")
         send_btn.add_css_class("spook-btn")
         send_btn.add_css_class("spook-msi-btn")
         send_btn.add_css_class("spook-msi-send")
-        send_btn.set_tooltip_text("Enviar")
+        send_btn.set_tooltip_text("Send")
         send_btn.connect("clicked", lambda *_: self._enviar_chat(self.chat_entry))
         input_row.append(file_btn)
         input_row.append(self.chat_entry)
         input_row.append(send_btn)
         box.append(input_row)
-        return box
-
-    def _hub_tasks_page(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        hdr = Gtk.Box(spacing=8)
-        hdr.append(Gtk.Label(label="Tasks", xalign=0, css_name="spook-card-title"))
-        box.append(hdr)
-        input_row = Gtk.Box(spacing=4)
-        entry = Gtk.Entry()
-        entry.add_css_class("spook-input")
-        entry.set_hexpand(True)
-        entry.set_placeholder_text("new task...")
-
-        def do_add(_):
-            t = entry.get_text().strip()
-            if t:
-                entry.set_text("")
-                nova_id = str(uuid.uuid4())
-                if self._socket_online:
-                    self.sio.emit("task_nova", {"id": nova_id, "titulo": t})
-                else:
-                    self._bg(lambda: (hub_store.criar_task(t), self._refresh_tasks()))
-
-        entry.connect("activate", do_add)
-        input_row.append(entry)
-        box.append(input_row)
-        task_scroll = Gtk.ScrolledWindow()
-        task_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        task_scroll.set_vexpand(True)
-        task_scroll.set_child(self.tasks_box)
-        box.append(task_scroll)
         return box
 
     def _hub_galeria_page(self):
@@ -1187,7 +1243,9 @@ class SpookOverlay(Gtk.Application):
         self.galeria_filtro = "all"
         self.galeria_filter_btns = {}
         hdr = Gtk.Box(spacing=8)
-        hdr.append(Gtk.Label(label="GALERIA", xalign=0, css_name="spook-card-title"))
+        lb = Gtk.Label(label="GALLERY", xalign=0)
+        lb.add_css_class("spook-card-title")
+        hdr.append(lb)
         self.galeria_count_label = Gtk.Label(label="0", xalign=0)
         self.galeria_count_label.add_css_class("spook-gal-badge")
         self.galeria_count_label.add_css_class("spook-gal-badge-all")
@@ -1322,7 +1380,7 @@ class SpookOverlay(Gtk.Application):
             self.galeria_box.append(card)
         if visiveis == 0:
             lbl = Gtk.Label(
-                label="Nenhum arquivo na galeria" if not items else "Nenhum arquivo nesta categoria",
+                label="No files in the gallery" if not items else "No files in this category",
                 xalign=0,
             )
             lbl.add_css_class("spook-note")
@@ -1338,7 +1396,9 @@ class SpookOverlay(Gtk.Application):
     def _hub_ai_page(self):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         hdr = Gtk.Box(spacing=8)
-        hdr.append(Gtk.Label(label="SPOOK AI", xalign=0, css_name="spook-card-title"))
+        lb = Gtk.Label(label="SPOOK AI", xalign=0)
+        lb.add_css_class("spook-card-title")
+        hdr.append(lb)
         clear_btn = Gtk.Button(label="CLEAR")
         clear_btn.add_css_class("spook-err-btn")
         clear_btn.connect("clicked", lambda *_: (self._clear(self.ai_chat_box), setattr(self, 'ai_messages', [])))
@@ -1492,7 +1552,7 @@ class SpookOverlay(Gtk.Application):
         if pend:
             p = Gtk.Label(label="\u23f3")
             p.add_css_class("spook-note")
-            p.set_tooltip_text("enviando...")
+            p.set_tooltip_text("sending...")
             rodape.append(p)
         if texto:
             copy_btn = Gtk.Button(label="\ue14d")
@@ -1500,7 +1560,7 @@ class SpookOverlay(Gtk.Application):
             copy_btn.add_css_class("spook-msi-btn")
             copy_btn.add_css_class("spook-msi-copy")
             self._tint_button(copy_btn, "spook-msi-copy")
-            copy_btn.set_tooltip_text("Copiar texto")
+            copy_btn.set_tooltip_text("Copy text")
             copy_btn.connect("clicked", lambda _, t=texto: self._copiar_texto(t) if t else None)
             rodape.append(copy_btn)
         del_btn = Gtk.Button(label="\ue92e")
@@ -1508,7 +1568,7 @@ class SpookOverlay(Gtk.Application):
         del_btn.add_css_class("spook-msi-btn")
         del_btn.add_css_class("spook-msi-del")
         self._tint_button(del_btn, "spook-msi-del")
-        del_btn.set_tooltip_text("Apagar")
+        del_btn.set_tooltip_text("Delete")
         del_btn.connect("clicked", lambda _, m=msg: self._bg(lambda: self._apagar_msg_thread(m)))
         rodape.append(del_btn)
         return rodape
@@ -1558,7 +1618,8 @@ class SpookOverlay(Gtk.Application):
                 bolha.append(self._imagem_midia(nome))
             else:
                 bot = Gtk.Button(label=f"\u2197 {nome}")
-                bot.add_css_class("spook-loc")
+                bot.add_css_class("spook-btn")
+                bot.add_css_class("spook-btn-text-sm")
                 bot.connect("clicked", lambda *_a: self._bg(lambda: self._abrir_midia_baixada(nome)))
                 bolha.append(bot)
         bolha.append(self._rodape_msg(msg, pend))
@@ -1574,7 +1635,7 @@ class SpookOverlay(Gtk.Application):
         def _carregar():
             path = self._baixar_midia_http(nome) or hub_store.baixar_midia(nome)
             if not path:
-                GLib.idle_add(lambda: (carg.set_text("midia indisponivel"), False)[0] if False else carg.set_text("midia indisponivel"))
+                GLib.idle_add(lambda: (carg.set_text("media unavailable"), False)[0] if False else carg.set_text("media unavailable"))
                 return
             GLib.idle_add(lambda: self._monta_player(caixa, path, tipo, carg, nome))
 
@@ -1593,7 +1654,7 @@ class SpookOverlay(Gtk.Application):
             controles.set_media_stream(mfile)
             controles.set_size_request(440, 40)
             caixa.append(controles)
-            abrir = Gtk.Button(label="\u2197 Abrir fora")
+            abrir = Gtk.Button(label="\u2197 Open externally")
             abrir.add_css_class("spook-loc")
             abrir.connect("clicked", lambda *_a: executar(["gio", "open", path]))
             caixa.append(abrir)
@@ -1616,20 +1677,20 @@ class SpookOverlay(Gtk.Application):
         evt = Gtk.GestureClick()
         evt.connect("pressed", lambda *_a: self._bg(_abrir))
         caixa.add_controller(evt)
-        caixa.set_tooltip_text("Abrir imagem")
+        caixa.set_tooltip_text("Open image")
         caixa.set_cursor_from_name("pointer")
 
         def _carregar():
             path = self._baixar_midia_http(nome) or hub_store.baixar_midia(nome)
             if not path:
-                GLib.idle_add(lambda: carg.set_text("midia indisponivel"))
+                GLib.idle_add(lambda: carg.set_text("media unavailable"))
                 return
             try:
                 pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(path, 440, 440, True, GdkPixbuf.InterpType.BILINEAR)
                 img = Gtk.Image.new_from_pixbuf(pb)
                 GLib.idle_add(lambda: (caixa.remove(carg), caixa.append(img)))
             except Exception:
-                GLib.idle_add(lambda: carg.set_text("imagem indisponivel"))
+                GLib.idle_add(lambda: carg.set_text("image unavailable"))
 
         self._bg(_carregar)
         return caixa
@@ -1639,7 +1700,7 @@ class SpookOverlay(Gtk.Application):
         try:
             return str(pacote or "celular").split(".")[-1].upper()
         except Exception:
-            return "CELULAR"
+            return "PHONE"
 
     def _mostrar_notificacao(self, app, titulo, texto):
         """Popup da notificacao do celular, no mesmo visual do app Android."""
@@ -1757,6 +1818,9 @@ class SpookOverlay(Gtk.Application):
         GLib.idle_add(_aplicar)
         GLib.timeout_add(60, _aplicar)
         GLib.timeout_add(250, _aplicar)
+        if force:
+            GLib.timeout_add(600, _aplicar)
+            GLib.timeout_add(1200, _aplicar)
 
     def _copiar_texto(self, texto):
         disp = Gdk.Display.get_default()
@@ -1825,26 +1889,29 @@ class SpookOverlay(Gtk.Application):
             @self.sio.on("task_lista")
             def on_task_lista(d):
                 tasks = (d or {}).get("tasks", [])
-                self._tasks_cache = {t.get("id"): t for t in tasks if isinstance(t, dict) and t.get("id")}
-                GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
+                self._tasks_cache = {
+                    t.get("id"): t for t in tasks
+                    if isinstance(t, dict) and t.get("id")
+                }
+                self.pad_mgr.aplicar_tarefas(list(self._tasks_cache.values()))
 
             @self.sio.on("task_nova")
             def on_task_nova(msg):
                 if isinstance(msg, dict) and msg.get("id"):
                     self._tasks_cache[msg["id"]] = msg
-                GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
+                self.pad_mgr.aplicar_tarefas(list(self._tasks_cache.values()))
 
             @self.sio.on("task_atualizada")
             def on_task_atualizada(msg):
                 if isinstance(msg, dict) and msg.get("id"):
                     self._tasks_cache[msg["id"]] = msg
-                GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
+                self.pad_mgr.aplicar_tarefas(list(self._tasks_cache.values()))
 
             @self.sio.on("task_apagada")
             def on_task_apagada(msg):
                 if isinstance(msg, dict) and msg.get("id"):
                     self._tasks_cache.pop(msg["id"], None)
-                GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
+                self.pad_mgr.aplicar_tarefas(list(self._tasks_cache.values()))
 
             @self.sio.on("notificacao_nova")
             def on_notificacao_nova(dados):
@@ -1896,13 +1963,6 @@ class SpookOverlay(Gtk.Application):
         self.chat_status_label.set_text(msg)
         GLib.timeout_add_seconds(3, lambda: (self.chat_status_label.set_text(""), False))
 
-    def _refresh_tasks(self):
-        if self._socket_online and self._tasks_cache:
-            GLib.idle_add(lambda: self._fill_tasks(list(self._tasks_cache.values())))
-            return
-        tasks = hub_store.listar_tasks()
-        GLib.idle_add(lambda: self._fill_tasks(tasks))
-
     def _puxar_lists(self):
         try:
             if self.sio and getattr(self.sio, "connected", False):
@@ -1911,70 +1971,51 @@ class SpookOverlay(Gtk.Application):
         except Exception:
             pass
 
-    def _fill_tasks(self, tasks):
-        self._clear(self.tasks_box)
-        for t in tasks:
-            tid = t.get("id")
-            estado = bool(t.get("feito"))
-            cp = str(t.get("criado_por", "")).lower()
-            criado_por = "POCO" if cp == "android" else (str(t.get("criado_por", "?")).upper() or "?")
-            is_local = cp == "android"
+    # ── TAREFAS (dentro do PAD) ──
+    def _tarefas_pedir(self):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("task_listar", {})
+                return
+        except Exception:
+            pass
+        self._tarefas_do_hub()
 
-            bolha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            bolha.add_css_class("spook-msg-arch" if is_local else "spook-msg-phone")
-            bolha.set_hexpand(True)
+    def _tarefas_do_hub(self):
+        def _ler():
+            try:
+                tasks = hub_store.listar_tasks()
+            except Exception:
+                tasks = []
+            GLib.idle_add(lambda: (self.pad_mgr.aplicar_tarefas(tasks), False)[1])
+        self._bg(_ler)
 
-            chk = Gtk.CheckButton()
-            chk.set_active(estado)
-            chk.set_valign(Gtk.Align.CENTER)
-            chk.set_tooltip_text("Marcar feita")
+    def _tarefa_adicionar(self, titulo):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("task_nova", {"id": str(uuid.uuid4()), "titulo": titulo})
+                return
+        except Exception:
+            pass
+        self._bg(lambda: (hub_store.criar_task(titulo), self._tarefas_do_hub()))
 
-            def _toggle(b, i=tid, e=estado):
-                if b.get_active() == e:
-                    return
-                if self._socket_online:
-                    self.sio.emit("task_atualizada", {"id": i, "feito": bool(b.get_active())})
-                else:
-                    self._bg(lambda: (hub_store.marcar_task(i, bool(b.get_active())), self._refresh_tasks()))
+    def _tarefa_marcar(self, task_id, feito):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("task_atualizada", {"id": task_id, "feito": bool(feito)})
+                return
+        except Exception:
+            pass
+        self._bg(lambda: (hub_store.marcar_task(task_id, bool(feito)), self._tarefas_do_hub()))
 
-            chk.connect("toggled", _toggle)
-            bolha.append(chk)
-
-            conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-            conteudo.set_hexpand(True)
-
-            cab = Gtk.Label(label=f"{criado_por} · {hora(t.get('ts', 0))}", xalign=0)
-            cab.add_css_class("spook-note")
-            cab.add_css_class("spook-msg-h")
-            cab.add_css_class("spook-msg-h-arch" if is_local else "spook-msg-h-phone")
-            conteudo.append(cab)
-
-            titulo = Gtk.Label(label=t.get("titulo", ""), xalign=0, wrap=True)
-            titulo.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
-            titulo.add_css_class("spook-msg-txt")
-            if estado:
-                titulo.add_css_class("spook-tarefa-feita")
-            conteudo.append(titulo)
-
-            rodape = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-            rodape.set_halign(Gtk.Align.END)
-
-            del_btn = Gtk.Button(label="Del")
-            del_btn.add_css_class("spook-btn")
-            del_btn.add_css_class("spook-err-btn")
-            del_btn.set_tooltip_text("Apagar task")
-
-            def _del(_, i=tid):
-                if self._socket_online:
-                    self.sio.emit("task_apagada", {"id": i})
-                else:
-                    self._bg(lambda: (hub_store.apagar_task(i), self._refresh_tasks()))
-
-            del_btn.connect("clicked", _del)
-            rodape.append(del_btn)
-            conteudo.append(rodape)
-            bolha.append(conteudo)
-            self.tasks_box.append(bolha)
+    def _tarefa_apagar(self, task_id):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("task_apagada", {"id": task_id})
+                return
+        except Exception:
+            pass
+        self._bg(lambda: (hub_store.apagar_task(task_id), self._tarefas_do_hub()))
 
     def _enviar_ai(self, entry):
         texto = entry.get_text().strip()
@@ -2128,8 +2169,7 @@ class SpookOverlay(Gtk.Application):
 
         # pin do Arch (ciano) + pin do Android (pink): dizem de quem e a posicao
         row_arch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        ic_arch = Gtk.Label(label=self._MSI["loc"])
-        ic_arch.add_css_class("spook-msi")
+        ic_arch = self._icone_metric("loc")
         ic_arch.add_css_class("spook-msi-arch")
         row_arch.append(ic_arch)
         self.home_arch_label.set_hexpand(True)
@@ -2137,8 +2177,7 @@ class SpookOverlay(Gtk.Application):
         caixa.append(row_arch)
 
         row_cel = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        ic_cel = Gtk.Label(label=self._MSI["loc"])
-        ic_cel.add_css_class("spook-msi")
+        ic_cel = self._icone_metric("loc")
         ic_cel.add_css_class("spook-msi-android")
         row_cel.append(ic_cel)
         self.home_cel_label.set_hexpand(True)
@@ -2168,12 +2207,12 @@ class SpookOverlay(Gtk.Application):
             return GLib.markup_escape_text(str(s))
 
         self.arch_status_label.set_markup(
-            f'ONLINE  <span font_family="Material Symbols Rounded">\ue1a5</span> {_esc(bat)}% {_esc(bat_status)}'
+            f'ONLINE  <span font_family="Material Symbols Rounded">\ue1a5</span> {_esc(bat)}% {_esc(str(bat_status).upper())}'
         )
         self.arch_status_label.remove_css_class("spook-metric")
         self.arch_status_label.add_css_class("spook-metric")
         self.arch_status_label.add_css_class(bat_color)
-        self.arch_bat_label.set_text(f"{bat}% {bat_status}")
+        self.arch_bat_label.set_text(f"{bat}% {str(bat_status).upper()}")
         self.arch_ram_label.set_text(f"RAM {ram_pct}% ({ram_used}/{ram_total} MB)")
         self.arch_disk_label.set_text(f"DISK {disk_pct}% ({disk_used}/{disk_total} GB)")
         self.arch_cpu_label.set_text(f"CPU {cpu_pct}%")
@@ -2200,23 +2239,30 @@ class SpookOverlay(Gtk.Application):
         self.android_online_label.add_css_class("spook-ok" if online else "spook-err")
         self.android_online_label.add_css_class("spook-metric")
         estado = "CHARGING" if cel.get("carregando") else "DISCHARGING"
-        self.android_bat_label.set_text(f"{bat_cel}% {estado}" if bat_cel is not None else "battery --")
+
+        def _v(x):
+            return "--" if x is None else x
+
+        self.android_bat_label.set_text(
+            f"{bat_cel}% {estado}" if bat_cel is not None else "BATTERY --"
+        )
         self.android_ram_label.set_text(
-            f"RAM {cel.get('ram_pct', '--')}% ({cel.get('ram_usado_mb', '--')}/{cel.get('ram_total_mb', '--')} MB)"
+            f"RAM {_v(cel.get('ram_pct'))}% "
+            f"({_v(cel.get('ram_usado_mb'))}/{_v(cel.get('ram_total_mb'))} MB)"
         )
         self.android_disk_label.set_text(
-            f"DISK {cel.get('disco_pct', '--')}% ({cel.get('disco_usado_gb', '--')}/{cel.get('disco_total_gb', '--')} GB)"
+            f"DISK {_v(cel.get('disco_pct'))}% "
+            f"({_v(cel.get('disco_usado_gb'))}/{_v(cel.get('disco_total_gb'))} GB)"
         )
-        self.android_cpu_label.set_text(f"CPU {cel.get('cpu_pct', '--')}%")
-        self.android_temp_label.set_text(f"TEMP {cel.get('temp_c', '--')}°C")
-        self.android_load_label.set_text(f"LOAD {cel.get('load1', '--')}")
+        self.android_cpu_label.set_text(f"CPU {_v(cel.get('cpu_pct'))}%")
+        self.android_temp_label.set_text(f"TEMP {_v(cel.get('temp_c'))}°C")
+        self.android_load_label.set_text(f"LOAD {_v(cel.get('load1'))}")
         self._atualizar_status(online)
 
         enviando = getattr(self, "_enviando_arquivo", False)
         if not enviando:
             self._bg(lambda: self._coletar_celular_periodico())
             self._bg(self._refresh_chat)
-            self._bg(self._refresh_tasks)
             self._bg(self._atualizar_local_periodico)
         return True
 

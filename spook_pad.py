@@ -54,8 +54,8 @@ CORES = [
 
 CSS_PAD = """
 .pad-card {
-  background: #16141F; border-radius: 16px; border: 1px solid #2A2736;
-  padding: 10px 14px; transition: all 140ms ease;
+  background: #16141F; border-radius: 18px; border: 1px solid #3A3648;
+  padding: 12px 16px; transition: all 140ms ease;
 }
 .pad-card:hover { background: #1E1C2A; border-color: #6E6A81; }
 .pad-card-atual { background: #1B1826; border-color: #FF4D9A; }
@@ -104,10 +104,56 @@ textview.pad-texto, textview.pad-texto text {
 }
 .pad-sep { background: #2A2736; min-height: 1px; }
 .pad-vazio { font-size: 12px; color: #6E6A81; }
-.pad-hist-row { background: #16141F; border-radius: 12px; padding: 8px 12px; }
+.pad-hist-row { background: #16141F; border-radius: 12px; border: 1px solid #2A2736; padding: 8px 12px; }
 .pad-hist-txt {
   font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
   font-size: 10px; color: #B8B4C8;
+}
+/* ---- NOTAS | TAREFAS ---- */
+button.pad-seg-btn {
+  background: transparent; background-image: none; color: #8A8F98;
+  border: 1px solid #3A3648; border-radius: 999px;
+  padding: 6px 16px; font-size: 10px; font-weight: 700;
+  box-shadow: none; outline: none;
+}
+button.pad-seg-btn:hover {
+  background: transparent; background-image: none; color: #F4F1FF;
+  border-color: #6E6A81; box-shadow: none;
+}
+button.pad-seg-on {
+  background: rgba(255,77,154,0.14); background-image: none;
+  color: #FF4D9A; border: 1px solid rgba(255,77,154,0.55);
+  padding: 6px 16px; font-size: 10px; font-weight: 700;
+  box-shadow: none; outline: none;
+}
+button.pad-seg-on:hover {
+  background: rgba(255,77,154,0.20); color: #FF7AB0; border-color: #FF4D9A;
+  box-shadow: none;
+}
+.pad-task {
+  background: #16141F; border-radius: 16px; border: 1px solid #3A3648;
+  padding: 8px 12px; transition: all 140ms ease;
+}
+.pad-task:hover { background: #1E1C2A; border-color: #6E6A81; }
+.pad-task-feita { background: #121019; border-color: #2A2736; }
+.pad-task-tit { font-size: 13px; font-weight: 700; color: #F4F1FF; }
+.pad-task-feita .pad-task-tit { color: #6E6A81; }
+.pad-task-meta {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 9px; color: #8A8F98;
+}
+.pad-task-chip {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 8px; font-weight: 700; border-radius: 999px; padding: 1px 8px;
+}
+.pad-task-chip-poco { color: #FF4D9A; background-color: rgba(255,77,154,0.14); }
+.pad-task-chip-arch { color: #5CE1E6; background-color: rgba(92,225,230,0.12); }
+.pad-task-vazio { font-size: 12px; color: #6E6A81; }
+progressbar.pad-prog > trough {
+  background: #241F31; border-radius: 999px; min-height: 4px; border: none;
+}
+progressbar.pad-prog > trough > progress {
+  background: #8BE04E; border-radius: 999px; min-height: 4px; border: none;
 }
 """
 
@@ -335,6 +381,20 @@ class SpookPadManager:
         self.lbl_count = None
         self.lbl_status = None
 
+        # tarefas (a mesma lista compartilhada do app/overlay antigo)
+        self.pilha_vistas = None
+        self.seg_notas = None
+        self.seg_tarefas = None
+        self.tasks_box = None
+        self.task_entry = None
+        self.lbl_tasks = None
+        self.prog_tasks = None
+        self.tasks = []
+        self.task_listar_cb = None
+        self.task_add_cb = None
+        self.task_toggle_cb = None
+        self.task_del_cb = None
+
         # editor
         self.ed_id = None
         self.ed_titulo = None
@@ -375,7 +435,7 @@ class SpookPadManager:
         t = _agora()
         return {
             "id": nid,
-            "titulo": (titulo or "").strip() or "sem titulo",
+            "title": (titulo or "").strip() or "untitled",
             "texto": texto or "",
             "hash": _hash(texto or ""),
             "em": t,
@@ -391,7 +451,7 @@ class SpookPadManager:
             "pendente": True,
         }
 
-    def criar_nota(self, titulo="sem titulo", texto=""):
+    def criar_nota(self, titulo="untitled", texto=""):
         with self._lock:
             nota = self._nota_vazia(str(uuid.uuid4()), titulo, texto)
             self.notas[nota["id"]] = nota
@@ -404,8 +464,8 @@ class SpookPadManager:
             if not atual:
                 return None
             h = _hash(texto)
-            tit = (titulo or "").strip() or "sem titulo"
-            if h == atual.get("hash") and tit == atual.get("titulo"):
+            tit = (titulo or "").strip() or "untitled"
+            if h == atual.get("hash") and tit == atual.get("title"):
                 return atual
             atual.update(
                 titulo=tit, texto=texto or "", hash=h, em=_agora(),
@@ -430,7 +490,7 @@ class SpookPadManager:
             if local is None:
                 local = {"id": nid, "historico": []}
                 self.notas[nid] = local
-            for campo in ("titulo", "texto", "hash", "em", "device", "criado_em",
+            for campo in ("title", "texto", "hash", "em", "device", "criado_em",
                           "versao", "removido", "removido_em", "n_versoes"):
                 if campo in remoto:
                     local[campo] = remoto[campo]
@@ -489,7 +549,7 @@ class SpookPadManager:
 
             if not local.get("pendente"):
                 local.update(
-                    titulo=remoto.get("titulo", local.get("titulo")),
+                    titulo=remoto.get("title", local.get("title")),
                     texto=remoto.get("texto", ""),
                     hash=rem_hash,
                     em=_int(remoto.get("em"), local.get("em", 0)),
@@ -517,14 +577,14 @@ class SpookPadManager:
                 versao=max(_int(local.get("versao"), 1), _int(remoto.get("versao"), 1)),
                 pendente=True,
             )
-            if fundido != local.get("texto") and local.get("titulo") == "sem titulo":
-                local["titulo"] = remoto.get("titulo") or local.get("titulo")
+            if fundido != local.get("texto") and local.get("title") == "untitled":
+                local["title"] = remoto.get("title") or local.get("title")
             self._gravar()
 
             if brigou and remoto.get("texto") and remoto.get("texto") != fundido:
                 copia = self._nota_vazia(
                     str(uuid.uuid4()),
-                    f'{local.get("titulo")} (Conflicted copy '
+                    f'{local.get("title")} (Conflicted copy '
                     f'{remoto.get("device") or DEVICE_ID} {carimbo_conflito()})',
                     remoto.get("texto", ""),
                 )
@@ -594,7 +654,7 @@ class SpookPadManager:
             if not n:
                 return
             corpo = {
-                "titulo": n.get("titulo", ""),
+                "title": n.get("title", ""),
                 "texto": n.get("texto", ""),
                 "em": _int(n.get("em"), _agora()),
                 "base_hash": n.get("base_hash", ""),
@@ -622,7 +682,7 @@ class SpookPadManager:
                 if brigou and remoto.get("texto") and remoto.get("texto") != fundido:
                     copia = self._nota_vazia(
                         str(uuid.uuid4()),
-                        f'{local.get("titulo")} (Conflicted copy '
+                        f'{local.get("title")} (Conflicted copy '
                         f'{remoto.get("device") or DEVICE_ID} {carimbo_conflito()})',
                         remoto.get("texto", ""),
                     )
@@ -644,7 +704,7 @@ class SpookPadManager:
             provider = Gtk.CssProvider()
             provider.load_from_data(CSS_PAD.encode())
             Gtk.StyleContext.add_provider_for_display(
-                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_USER + 10
             )
             self._css_instalado = True
         except Exception:
@@ -679,7 +739,7 @@ class SpookPadManager:
         titulo = Gtk.Label(label="PAD", xalign=0)
         titulo.add_css_class("spook-title")
         topo.append(titulo)
-        self.lbl_count = Gtk.Label(label="0 NOTAS", xalign=0)
+        self.lbl_count = Gtk.Label(label="0 NOTES", xalign=0)
         self.lbl_count.add_css_class("spook-meta")
         self.lbl_count.add_css_class("pad-meta")
         topo.append(self.lbl_count)
@@ -688,35 +748,236 @@ class SpookPadManager:
         espaco.set_hexpand(True)
         topo.append(espaco)
 
-        btn_add = Gtk.Button(label="+ NOVA")
+        btn_add = Gtk.Button(label="+ NEW")
         btn_add.add_css_class("spook-btn")
         btn_add.add_css_class("spook-accent")
         btn_add.connect("clicked", lambda *_: self._nova_nota())
         topo.append(btn_add)
+        self.btn_add_nota = btn_add
 
         btn_sync = Gtk.Button(label="SYNC")
         btn_sync.add_css_class("spook-btn")
-        btn_sync.connect("clicked", lambda *_: (self.sincronizar(True), self._pintar_status("sincronizando…"))[1])
+        btn_sync.connect("clicked", lambda *_: (self.sincronizar(True), self._pintar_status("syncing…"))[1])
         topo.append(btn_sync)
+        self.btn_sync_notas = btn_sync
         caixa.append(topo)
 
         self.busca = Gtk.Entry()
         self.busca.add_css_class("spook-input")
-        self.busca.set_placeholder_text("buscar nas notas…")
+        self.busca.set_placeholder_text("search notes…")
         self.busca.connect("changed", self._ao_buscar)
-        caixa.append(self.busca)
+        # NOTAS | TAREFAS (a janela de tasks vive dentro do PAD)
+        seg = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.seg_notas = Gtk.Button(label="NOTES")
+        self.seg_notas.add_css_class("pad-seg-btn")
+        self.seg_notas.connect("clicked", lambda *_: self._mostrar_vista("notas"))
+        seg.append(self.seg_notas)
+        self.seg_tarefas = Gtk.Button(label="TASKS")
+        self.seg_tarefas.add_css_class("pad-seg-btn")
+        self.seg_tarefas.connect("clicked", lambda *_: self._mostrar_vista("tarefas"))
+        seg.append(self.seg_tarefas)
+        caixa.append(seg)
+
+        self.pilha_vistas = Gtk.Stack()
+        self.pilha_vistas.set_vexpand(True)
+
+        notas_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        notas_box.append(self.busca)
 
         self.lbl_status = Gtk.Label(label="…", xalign=0)
         self.lbl_status.add_css_class("pad-meta")
-        caixa.append(self.lbl_status)
+        notas_box.append(self.lbl_status)
 
         self.lista_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.set_vexpand(True)
         scroll.set_child(self.lista_box)
+        notas_box.append(scroll)
+
+        self.pilha_vistas.add_named(notas_box, "notas")
+        self.pilha_vistas.add_named(self._caixa_tarefas(), "tarefas")
+        self.pilha_vistas.set_visible_child_name("notas")
+        self._atualizar_seg("notas")
+        caixa.append(self.pilha_vistas)
+        return caixa
+
+    # --------------------------------------------------------------- tarefas
+    def _caixa_tarefas(self):
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+
+        topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_tasks = Gtk.Label(label="0 TASKS", xalign=0)
+        self.lbl_tasks.add_css_class("pad-meta")
+        topo.append(self.lbl_tasks)
+        espaco = Gtk.Box()
+        espaco.set_hexpand(True)
+        topo.append(espaco)
+        btn_refresh = Gtk.Button(label="↻")
+        btn_refresh.add_css_class("spook-btn")
+        btn_refresh.add_css_class("spook-btn-text-sm")
+        btn_refresh.set_tooltip_text("Refresh tasks")
+        btn_refresh.connect("clicked", lambda *_: self.pedir_tarefas())
+        topo.append(btn_refresh)
+        caixa.append(topo)
+
+        self.prog_tasks = Gtk.ProgressBar()
+        self.prog_tasks.add_css_class("pad-prog")
+        self.prog_tasks.set_fraction(0.0)
+        self.prog_tasks.set_show_text(False)
+        caixa.append(self.prog_tasks)
+
+        linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        self.task_entry = Gtk.Entry()
+        self.task_entry.add_css_class("spook-input")
+        self.task_entry.set_hexpand(True)
+        self.task_entry.set_placeholder_text("new task…")
+        self.task_entry.connect("activate", lambda *_: self._adicionar_tarefa())
+        linha.append(self.task_entry)
+        btn_add = Gtk.Button(label="+ ADD")
+        btn_add.add_css_class("spook-btn")
+        btn_add.add_css_class("spook-accent")
+        btn_add.connect("clicked", lambda *_: self._adicionar_tarefa())
+        linha.append(btn_add)
+        caixa.append(linha)
+
+        self.tasks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_vexpand(True)
+        scroll.set_child(self.tasks_box)
         caixa.append(scroll)
         return caixa
+
+    def _atualizar_seg(self, vista):
+        # contagem e botoes de NOTAS somem na vista de tarefas
+        if self.lbl_count is not None:
+            self.lbl_count.set_visible(vista == "notas")
+        for attr in ("btn_add_nota", "btn_sync_notas"):
+            botao = getattr(self, attr, None)
+            if botao is not None:
+                botao.set_visible(vista == "notas")
+        for botao, nome in ((self.seg_notas, "notas"), (self.seg_tarefas, "tarefas")):
+            if botao is None:
+                continue
+            botao.remove_css_class("pad-seg-on")
+            botao.remove_css_class("pad-seg-btn")
+            botao.add_css_class("pad-seg-on" if nome == vista else "pad-seg-btn")
+
+    def _mostrar_vista(self, vista):
+        if self.pilha_vistas is not None:
+            self.pilha_vistas.set_visible_child_name(vista)
+        self._atualizar_seg(vista)
+        if vista == "tarefas":
+            self.pedir_tarefas()
+
+    def pedir_tarefas(self):
+        if callable(self.task_listar_cb):
+            self.task_listar_cb()
+        else:
+            self.aplicar_tarefas([])
+
+    def aplicar_tarefas(self, tasks):
+        self.tasks = [dict(t) for t in (tasks or []) if isinstance(t, dict) and t.get("id")]
+        GLib.idle_add(lambda: (self._render_tarefas(), False)[1])
+
+    def _adicionar_tarefa(self):
+        if self.task_entry is None:
+            return
+        titulo = (self.task_entry.get_text() or "").strip()
+        if not titulo:
+            return
+        self.task_entry.set_text("")
+        if callable(self.task_add_cb):
+            self.task_add_cb(titulo)
+
+    def _render_tarefas(self):
+        if self.tasks_box is None:
+            return
+        while (c := self.tasks_box.get_first_child()):
+            self.tasks_box.remove(c)
+
+        tasks = sorted(
+            self.tasks,
+            key=lambda t: (_int(t.get("ts")), ),
+            reverse=True,
+        )
+        feitas = sum(1 for t in tasks if t.get("feito"))
+        if self.lbl_tasks is not None:
+            self.lbl_tasks.set_text(
+                f"{len(tasks) - feitas} OPEN"
+                f" · {len(tasks)} TASK{'S' if len(tasks) != 1 else ''}"
+            )
+        if self.prog_tasks is not None:
+            self.prog_tasks.set_fraction(feitas / len(tasks) if tasks else 0.0)
+
+        if not tasks:
+            vazio = Gtk.Label(
+                label="NO TASKS YET\n\ntype above and hit + ADD.\nthey also show on the phone PAD.",
+                justify=Gtk.Justification.CENTER,
+            )
+            vazio.add_css_class("pad-task-vazio")
+            vazio.set_vexpand(True)
+            self.tasks_box.append(vazio)
+            return
+
+        for t in tasks:
+            self.tasks_box.append(self._card_tarefa(t))
+
+    def _card_tarefa(self, t):
+        feito = bool(t.get("feito"))
+        origem = str(t.get("criado_por") or "?").lower()
+
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        card.add_css_class("pad-task")
+        if feito:
+            card.add_css_class("pad-task-feita")
+
+        chk = Gtk.CheckButton()
+        chk.set_active(feito)
+        chk.set_valign(Gtk.Align.CENTER)
+
+        def _toggle(b, i=t.get("id"), antes=feito):
+            if bool(b.get_active()) == antes:
+                return
+            if callable(self.task_toggle_cb):
+                self.task_toggle_cb(i, bool(b.get_active()))
+
+        chk.connect("toggled", _toggle)
+        card.append(chk)
+
+        conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        conteudo.set_hexpand(True)
+        titulo = Gtk.Label(label=(t.get("titulo") or t.get("title") or "")[:300], xalign=0, wrap=True)
+        titulo.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        titulo.add_css_class("pad-task-tit")
+        conteudo.append(titulo)
+
+        meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        chip = Gtk.Label(label="POCO" if origem == "android" else ("ARCH" if origem == "arch" else origem.upper() or "?"))
+        chip.add_css_class("pad-task-chip")
+        chip.add_css_class("pad-task-chip-poco" if origem == "android" else "pad-task-chip-arch")
+        meta.append(chip)
+        quando = Gtk.Label(label=carimbo(_int(t.get("ts"))), xalign=0)
+        quando.add_css_class("pad-task-meta")
+        meta.append(quando)
+        conteudo.append(meta)
+        card.append(conteudo)
+
+        del_btn = Gtk.Button(label="DEL")
+        del_btn.add_css_class("spook-btn")
+        del_btn.add_css_class("spook-err-btn")
+        del_btn.add_css_class("spook-btn-text-sm")
+        del_btn.set_valign(Gtk.Align.CENTER)
+        del_btn.set_tooltip_text("Delete task")
+
+        def _del(_, i=t.get("id")):
+            if callable(self.task_del_cb):
+                self.task_del_cb(i)
+
+        del_btn.connect("clicked", _del)
+        card.append(del_btn)
+        return card
 
     def _ao_buscar(self, entry):
         self._filtro = (entry.get_text() or "").strip().lower()
@@ -730,7 +991,7 @@ class SpookPadManager:
             f = self._filtro
             notas = [
                 n for n in notas
-                if f in (n.get("titulo") or "").lower() or f in (n.get("texto") or "").lower()
+                if f in (n.get("title") or "").lower() or f in (n.get("texto") or "").lower()
             ]
         notas.sort(key=lambda n: (_int(n.get("em")), _int(n.get("versao"))), reverse=True)
         return notas
@@ -742,10 +1003,10 @@ class SpookPadManager:
             self.lista_box.remove(c)
         notas = self._notas_visiveis()
         if self.lbl_count is not None:
-            self.lbl_count.set_text(f"{len(notas)} NOTA{'S' if len(notas) != 1 else ''}")
+            self.lbl_count.set_text(f"{len(notas)} NOTE{'S' if len(notas) != 1 else ''}")
         if not notas:
             vazio = Gtk.Label(
-                label="NENHUMA NOTA AINDA\n\ntoque em + NOVA e escreva.\nsincroniza sozinho com o relay.",
+                label="NO NOTES YET\n\ntap + NEW and start writing.\nsyncs automatically with the relay.",
                 justify=Gtk.Justification.CENTER,
             )
             vazio.add_css_class("pad-vazio")
@@ -762,13 +1023,13 @@ class SpookPadManager:
         card.add_css_class(f"pad-cor-{cor_da_nota(n.get('id', ''))}")
 
         topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        titulo = Gtk.Label(label=(n.get("titulo") or "sem titulo")[:120], xalign=0)
+        titulo = Gtk.Label(label=(n.get("title") or "untitled")[:120], xalign=0)
         titulo.add_css_class("pad-titulo-card")
         titulo.set_ellipsize(Pango.EllipsizeMode.END)
         titulo.set_hexpand(True)
         topo.append(titulo)
         if n.get("pendente"):
-            chip = Gtk.Label(label="PENDENTE")
+            chip = Gtk.Label(label="PENDING")
             chip.add_css_class("pad-chip")
             chip.add_css_class("pad-chip-pend")
             topo.append(chip)
@@ -790,7 +1051,7 @@ class SpookPadManager:
             f" · {n.get('device') or '--'}"
         )
         if _int(n.get("n_versoes")):
-            meta += f" · {_int(n.get('n_versoes'))}v no historico"
+            meta += f" · {_int(n.get('n_versoes'))}v in history"
         lbl_meta = Gtk.Label(label=meta, xalign=0)
         lbl_meta.add_css_class("pad-meta")
         card.append(lbl_meta)
@@ -830,7 +1091,7 @@ class SpookPadManager:
         caixa.add_css_class("spook-root")
 
         topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        btn_voltar = Gtk.Button(label="VOLTAR")
+        btn_voltar = Gtk.Button(label="BACK")
         btn_voltar.add_css_class("spook-btn")
         btn_voltar.set_valign(Gtk.Align.CENTER)
         btn_voltar.connect("clicked", lambda *_: self._fechar_editor())
@@ -839,7 +1100,7 @@ class SpookPadManager:
         coluna = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         coluna.set_hexpand(True)
         coluna.set_valign(Gtk.Align.CENTER)
-        rotulo = Gtk.Label(label="PAD // NOTA", xalign=0)
+        rotulo = Gtk.Label(label="PAD // NOTE", xalign=0)
         rotulo.add_css_class("pad-ed-titulo")
         coluna.append(rotulo)
         self.ed_status = Gtk.Label(label="--", xalign=0)
@@ -847,12 +1108,12 @@ class SpookPadManager:
         coluna.append(self.ed_status)
         topo.append(coluna)
 
-        btn_hist = Gtk.Button(label="HISTORICO")
+        btn_hist = Gtk.Button(label="HISTORY")
         btn_hist.add_css_class("spook-btn")
         btn_hist.connect("clicked", lambda *_: self._mostrar_historico())
         topo.append(btn_hist)
 
-        btn_apagar = Gtk.Button(label="APAGAR")
+        btn_apagar = Gtk.Button(label="DELETE")
         btn_apagar.add_css_class("spook-btn")
         btn_apagar.add_css_class("spook-err-btn")
         btn_apagar.connect("clicked", lambda *_: self._confirmar_apagar())
@@ -861,7 +1122,7 @@ class SpookPadManager:
 
         self.ed_titulo = Gtk.Entry()
         self.ed_titulo.add_css_class("pad-titulo")
-        self.ed_titulo.set_placeholder_text("titulo")
+        self.ed_titulo.set_placeholder_text("title")
         self.ed_titulo.connect("changed", self._ao_digitar)
         caixa.append(self.ed_titulo)
 
@@ -913,7 +1174,7 @@ class SpookPadManager:
             if not n or n.get("removido"):
                 return
             self.ed_id = nid
-            titulo = n.get("titulo") or "sem titulo"
+            titulo = n.get("title") or "untitled"
             texto = n.get("texto") or ""
         self._pintar_barra(nid)
         self._buffer_guard = True
@@ -949,7 +1210,7 @@ class SpookPadManager:
                 # apagaram a nota no celular enquanto eu olhava: sai da tela
                 GLib.idle_add(lambda: (self._fechar_editor(), False)[1])
                 return
-            titulo, texto = n.get("titulo", ""), n.get("texto", "")
+            titulo, texto = n.get("title", ""), n.get("texto", "")
             versao, em = _int(n.get("versao"), 1), _int(n.get("em"))
         if self.ed_titulo.get_text() != titulo:
             self._buffer_guard = True
@@ -965,7 +1226,7 @@ class SpookPadManager:
             return
         self.ed_sujo = True
         self._atualizar_rodape()
-        self.ed_status.set_text("editando…")
+        self.ed_status.set_text("editing…")
         if self._ed_timer is not None:
             try:
                 GLib.source_remove(self._ed_timer)
@@ -1005,9 +1266,9 @@ class SpookPadManager:
     def _pos_salvar(self, nid, ok, quando, versao):
         if self.ed_id == nid:
             if ok:
-                self.ed_status.set_text(f"salvo {carimbo(quando)} · v{versao}")
+                self.ed_status.set_text(f"saved {carimbo(quando)} · v{versao}")
             else:
-                self.ed_status.set_text("offline · guardado no aparelho")
+                self.ed_status.set_text("offline · saved on device")
         self._pintar_status("")
         return False
 
@@ -1033,10 +1294,10 @@ class SpookPadManager:
             return
         nid = self.ed_id
         win, raiz = self._janela_modal("SPOOK // HISTORICO")
-        cab = Gtk.Label(label="HISTORICO DA NOTA", xalign=0)
+        cab = Gtk.Label(label="NOTE HISTORY", xalign=0)
         cab.add_css_class("spook-title")
         raiz.append(cab)
-        info = Gtk.Label(label="carregando…", xalign=0)
+        info = Gtk.Label(label="loading…", xalign=0)
         info.add_css_class("pad-meta")
         raiz.append(info)
 
@@ -1051,7 +1312,7 @@ class SpookPadManager:
             while (c := box.get_first_child()):
                 box.remove(c)
             if not versoes:
-                info.set_text("sem versoes anteriores — o relay guarda as 20 ultimas")
+                info.set_text("no earlier versions — the relay keeps the last 20")
                 return
             info.set_text(f"{len(versoes)} versao(oes) · a atual no topo")
             for v in versoes:
@@ -1075,7 +1336,7 @@ class SpookPadManager:
                 textos.append(lbl)
                 linha.append(textos)
                 if not v.get("atual"):
-                    btn = Gtk.Button(label="RESTAURAR")
+                    btn = Gtk.Button(label="RESTORE")
                     btn.add_css_class("spook-btn")
                     btn.connect("clicked", lambda _b, em=_int(v.get("em")): (restaurar(em), win.close())[1])
                     linha.append(btn)
@@ -1111,7 +1372,7 @@ class SpookPadManager:
         nid = self.ed_id
         win, raiz = self._janela_modal("SPOOK // APAGAR", 520, 240)
         lab = Gtk.Label(
-            label="Apagar esta nota?\n\nEla sai da lista em todos os aparelhos.\nO arquivo fica no Drive (lapide).",
+            label="Delete this note?\n\nIt disappears from every device.\nThe file stays in Drive (tombstone).",
             justify=Gtk.Justification.CENTER,
         )
         lab.add_css_class("spook-note")
@@ -1120,12 +1381,12 @@ class SpookPadManager:
 
         linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         linha.set_halign(Gtk.Align.END)
-        cancelar = Gtk.Button(label="CANCELAR")
+        cancelar = Gtk.Button(label="CANCEL")
         cancelar.add_css_class("spook-btn")
         cancelar.connect("clicked", lambda *_: win.close())
         linha.append(cancelar)
 
-        apagar = Gtk.Button(label="APAGAR")
+        apagar = Gtk.Button(label="DELETE")
         apagar.add_css_class("spook-btn")
         apagar.add_css_class("spook-err-btn")
 
