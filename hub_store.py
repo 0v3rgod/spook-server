@@ -10,11 +10,12 @@ from pathlib import Path
 REMOTE = os.environ.get("SPOOK_REMOTE", "gdrive:SPOOK")
 # 2026-10-21: desativado por decisão do usuário. NÃO sincronizar com Google Drive
 # (token revogado). Backup vai para nextcloud conforme configuração.
-DRIVE_SYNC_DISABLED = True
+DRIVE_SYNC_DISABLED = False
 CHAT = "chat"
 MEDIA = "media"
 TASKS = "tasks"
 TASKS_FILE = "tasks.json"
+FINANCE = "finance"
 ORIGEM = "arch"
 
 # Espelhos locais: rclone sync (1 chamada) + leitura de disco = muito mais rapido
@@ -23,6 +24,8 @@ _DADOS = Path(os.environ.get("SPOOK_DADOS", "/tmp"))
 _CHAT_DIR = _DADOS / Path(os.environ.get("SPOOK_CHAT_DIR", "spook_chat_local"))
 _TASKS_DIR = _DADOS / Path(os.environ.get("SPOOK_TASKS_DIR", "spook_tasks_local"))
 _TASKS_CACHE = _DADOS / Path(os.environ.get("SPOOK_TASKS_CACHE", "spook_tasks_cache.json"))
+_FINANCE_DIR = _DADOS / Path(os.environ.get("SPOOK_FINANCE_DIR", "spook_finance_local"))
+_FINANCE_CACHE = _DADOS / Path(os.environ.get("SPOOK_FINANCE_CACHE", "spook_finance_cache.json"))
 
 # Um unico sync por vez em toda a MAQUINA, nao por processo: servidor, overlay e
 # qualquer processo importando hub_store rodam refreshers concorrentes no MESMO
@@ -505,7 +508,10 @@ def _loop():
         time.sleep(1)
         _sync_tasks()
         _aaplica_pendentes_locais()  # garante que nada nosso sumiu do espelho
-        time.sleep(max(2, _REFRESHER_INTERVAL - 1))
+        time.sleep(1)
+        _sync_finance()
+        _aaplica_fpend_locais()
+        time.sleep(max(2, _REFRESHER_INTERVAL - 2))
 
 
 _start_refresher()
@@ -534,6 +540,11 @@ def _salvar_cache_tasks(tasks_dict):
 _TASKS_PEND_FILE = Path("/tmp/spook_tasks_pending.json")
 _TASKS_PEND_LOCK = "/tmp/spook_tasks_pending.lock"
 _TPEND = {}
+
+# Finance: per-file JSON in gdrive:SPOOK/finance/<id>.json (same pattern as tasks)
+_FINANCE_PEND_FILE = Path("/tmp/spook_finance_pending.json")
+_FINANCE_PEND_LOCK = "/tmp/spook_finance_pending.lock"
+_FPEND = {}
 
 
 def _tpend_lock():
@@ -682,6 +693,303 @@ def _merge_tasks(local: dict, remote: dict) -> dict:
 
 def _sorted_tasks(merged: dict):
     return sorted(merged.values(), key=lambda t: (t.get("feito", False), -t.get("ts", 0)))
+
+
+# ============================== FINANCE ==============================
+# Per-file JSON em gdrive:SPOOK/finance/<id>.json (padrao igual tasks)
+# Cada arquivo = uma despesa com suas parcelas (installments).
+# LWW por timestamp (em), merge simples, tombstone para delete.
+
+def _fpend_lock():
+    fd = open(_FINANCE_PEND_LOCK, "a+")
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    return fd
+
+
+def _fcarregar():
+    try:
+        arr = json.loads(_FINANCE_PEND_FILE.read_text())
+        return {f["id"]: f for f in arr if isinstance(f, dict) and f.get("id")} if isinstance(arr, list) else {}
+    except Exception:
+        return {}
+
+
+def _fsalvar():
+    try:
+        tmp = _FINANCE_PEND_FILE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(list(_FPEND.values()), ensure_ascii=False))
+        tmp.replace(_FINANCE_PEND_FILE)
+    except Exception:
+        pass
+
+
+def _fpin(record):
+    fd = _fpend_lock()
+    try:
+        _FPEND.update(_fcarregar())
+        _FPEND[record["id"]] = record
+        _fsalvar()
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+
+
+def _flush_fpending():
+    """Sobe TODAS as operacoes de finance pendentes (create/update/delete) de
+    qualquer processo. Idempotente por id."""
+    fd = _fpend_lock()
+    try:
+        _FPEND.update(_fcarregar())
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+    for fid in list(_FPEND):
+        rec = _FPEND.get(fid)
+        if not rec:
+            continue
+        fdu = _upload_lock()
+        try:
+            _FPEND.update(_fcarregar())
+            rec = _FPEND.get(fid)
+            if not rec:
+                continue
+            if rec.get("__del"):
+                if _remoto_tem(f"{FINANCE}/{fid}.json"):
+                    _run(["deletefile", _base(f"{FINANCE}/{fid}.json")], check=False)
+                alvo = False
+            else:
+                _gravar_finance_local(rec)
+                if not _remoto_tem(f"{FINANCE}/{fid}.json"):
+                    _run(["copyto", str(_FINANCE_DIR / f"{fid}.json"), _base(f"{FINANCE}/{fid}.json")], check=False)
+                alvo = True
+            if _remoto_tem(f"{FINANCE}/{fid}.json") != alvo:
+                continue
+            fd = _fpend_lock()
+            try:
+                _FPEND.update(_fcarregar())
+                _FPEND.pop(fid, None)
+                _fsalvar()
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+                fd.close()
+        except Exception:
+            continue
+        finally:
+            fcntl.flock(fdu, fcntl.LOCK_UN)
+            fdu.close()
+
+
+def _gravar_finance_local(expense):
+    if not expense or not expense.get("id"):
+        return
+    _FINANCE_DIR.mkdir(parents=True, exist_ok=True)
+    f = _FINANCE_DIR / f"{expense['id']}.json"
+    tmp = f.with_suffix(".json.tmp")
+    try:
+        tmp.write_text(json.dumps(expense, ensure_ascii=False))
+        tmp.replace(f)
+    except Exception:
+        pass
+
+
+def _aaplica_fpend_locais():
+    """Re-escreve no espelho local os .json pendentes (protege contra o prune do
+    rclone sync de outro processo antes do upload confirmar)."""
+    fd = _fpend_lock()
+    try:
+        _FPEND.update(_fcarregar())
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+    for rec in _FPEND.values():
+        if not rec.get("__del"):
+            _gravar_finance_local(rec)
+
+
+def _sync_finance():
+    with threading.Lock():
+        fd = _acquire_sync_lock()
+        if fd is None:
+            return False
+        try:
+            _flush_fpending()
+            os.makedirs(_FINANCE_DIR, exist_ok=True)
+            _run(["sync", "--fast-list", "--update", _base(FINANCE), str(_FINANCE_DIR)], check=False, timeout=120)
+            _aaplica_fpend_locais()
+            return True
+        except Exception:
+            return False
+        finally:
+            _release_sync_lock(fd)
+
+
+def _ler_cache_finance():
+    try:
+        d = json.loads(_FINANCE_CACHE.read_text())
+        if isinstance(d, dict) and "expenses" in d:
+            return {e["id"]: e for e in d["expenses"]}
+    except Exception:
+        pass
+    return {}
+
+
+def _salvar_cache_finance(expenses_dict):
+    tmp = _FINANCE_CACHE.with_suffix(".tmp")
+    tmp.write_text(json.dumps({"expenses": list(expenses_dict.values())}, ensure_ascii=False))
+    tmp.replace(_FINANCE_CACHE)
+
+
+def _merge_finance(local: dict, remote: dict) -> dict:
+    merged = {**local}
+    for fid, f in remote.items():
+        if fid and (fid not in merged or f.get("em", 0) > merged[fid].get("em", 0)):
+            merged[fid] = f
+    return merged
+
+
+def _sorted_expenses(merged: dict):
+    return sorted(merged.values(), key=lambda e: (-e.get("em", 0)))
+
+
+def listar_expenses():
+    """Leitura instantanea do espelho local (mesmo principio do chat/tasks)."""
+    locais = {}
+    if _FINANCE_DIR.exists():
+        for f in _FINANCE_DIR.glob("*.json"):
+            try:
+                e = json.loads(f.read_text())
+                if e.get("id"):
+                    locais[e["id"]] = e
+            except Exception:
+                continue
+    # cobre o que ainda esta pendente (upload nao confirmado)
+    fd = _fpend_lock()
+    try:
+        pend = _fcarregar()
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+    for fid, rec in pend.items():
+        if not rec.get("__del") and rec.get("id"):
+            locais[fid] = rec
+    _salvar_cache_finance(locais)
+    return _sorted_expenses(locais)
+
+
+def criar_expense(expense_data):
+    """Cria uma nova despesa com parcelas."""
+    nova = {
+        "id": str(uuid.uuid4()),
+        "em": int(time.time() * 1000),
+        "origem": ORIGEM,
+        **expense_data,
+    }
+    with threading.Lock():
+        merged = _ler_cache_finance()
+        merged[nova["id"]] = nova
+        _salvar_cache_finance(merged)
+        _gravar_finance_local(nova)
+        _fpin(nova)
+    return nova, _sorted_expenses(merged)
+
+
+def atualizar_expense(expense_id, updates):
+    """Atualiza uma despesa existente."""
+    with threading.Lock():
+        merged = _ler_cache_finance()
+        if expense_id in merged:
+            merged[expense_id] = {**merged[expense_id], **updates, "em": int(time.time() * 1000)}
+        else:
+            f = _FINANCE_DIR / f"{expense_id}.json"
+            try:
+                e = json.loads(f.read_text())
+                merged[expense_id] = {**e, **updates, "em": int(time.time() * 1000)}
+            except Exception:
+                return _sorted_expenses(merged)
+        _salvar_cache_finance(merged)
+        _gravar_finance_local(merged[expense_id])
+        _fpin(merged[expense_id])
+    return _sorted_expenses(merged)
+
+
+def apagar_expense(expense_id):
+    """Apaga uma despesa (tombstone)."""
+    with threading.Lock():
+        merged = _ler_cache_finance()
+        merged.pop(expense_id, None)
+        _salvar_cache_finance(merged)
+        try:
+            (_FINANCE_DIR / f"{expense_id}.json").unlink(missing_ok=True)
+        except Exception:
+            pass
+        _fpin({"id": expense_id, "__del": True})
+    return _sorted_expenses(merged)
+
+
+def atualizar_parcela(expense_id, parcela_index, updates):
+    """Atualiza uma parcela específica de uma despesa."""
+    with threading.Lock():
+        merged = _ler_cache_finance()
+        if expense_id in merged:
+            expense = merged[expense_id]
+            parcelas = expense.get("parcelas", [])
+            if 0 <= parcela_index < len(parcelas):
+                parcelas[parcela_index] = {**parcelas[parcela_index], **updates}
+                expense["parcelas"] = parcelas
+                expense["em"] = int(time.time() * 1000)
+                _salvar_cache_finance(merged)
+                _gravar_finance_local(expense)
+                _fpin(expense)
+            else:
+                return _sorted_expenses(merged)
+        else:
+            f = _FINANCE_DIR / f"{expense_id}.json"
+            try:
+                e = json.loads(f.read_text())
+                parcelas = e.get("parcelas", [])
+                if 0 <= parcela_index < len(parcelas):
+                    parcelas[parcela_index] = {**parcelas[parcela_index], **updates}
+                    e["parcelas"] = parcelas
+                    e["em"] = int(time.time() * 1000)
+                    merged[expense_id] = e
+                    _salvar_cache_finance(merged)
+                    _gravar_finance_local(e)
+                    _fpin(e)
+                else:
+                    return _sorted_expenses(merged)
+            except Exception:
+                pass
+    return _sorted_expenses(merged)
+
+
+def listar_parcelas_por_mes(ano, mes):
+    """Retorna todas as parcelas (não pagas) de um mês específico, agrupadas por dia."""
+    expenses = listar_expenses()
+    resultado = {}
+    for exp in expenses:
+        if exp.get("removido"):
+            continue
+        for i, p in enumerate(exp.get("parcelas", [])):
+            if p.get("paga"):
+                continue
+            due = p.get("dueDate") or p.get("due_date")
+            if not due:
+                continue
+            import datetime
+            dt = datetime.datetime.fromtimestamp(due / 1000)
+            if dt.year == ano and dt.month == mes:
+                dia = dt.day
+                if dia not in resultado:
+                    resultado[dia] = []
+                resultado[dia].append({
+                    "expense_id": exp["id"],
+                    "expense_title": exp.get("title") or exp.get("titulo") or "Despesa",
+                    "parcela_index": i,
+                    "valor": p.get("valor", 0),
+                    "due_date": due,
+                    "paga": p.get("paga", False),
+                })
+    return resultado
 
 
 def _base(rel):
@@ -985,7 +1293,7 @@ def salvar_tasks(tasks):
             _tpin(t)
 
 
-def criar_task(titulo):
+def criar_task(titulo, due_date=0):
     nova = {
         "id": str(uuid.uuid4()),
         "titulo": titulo.strip(),
@@ -993,6 +1301,8 @@ def criar_task(titulo):
         "criado_por": ORIGEM,
         "ts": int(time.time() * 1000),
     }
+    if due_date:
+        nova["due_date"] = due_date
     with _TASKS_LOCK:
         merged = _ler_cache_tasks()
         merged[nova["id"]] = nova
@@ -1002,22 +1312,66 @@ def criar_task(titulo):
     return nova, _sorted_tasks(merged)
 
 
-def marcar_task(task_id, feito):
+def marcar_task(task_id, feito, due_date=None):
     agora = int(time.time() * 1000)
     with _TASKS_LOCK:
         merged = _ler_cache_tasks()
         if task_id in merged:
-            merged[task_id] = {**merged[task_id], "feito": feito, "ts": agora}
+            update = {"feito": feito, "ts": agora}
+            if due_date is not None:
+                if due_date:
+                    update["due_date"] = due_date
+                elif "due_date" in merged[task_id]:
+                    # mantém o due_date existente se não for passado None explícito
+                    pass
+            merged[task_id] = {**merged[task_id], **update}
         else:
             f = _TASKS_DIR / f"{task_id}.json"
             try:
                 t = json.loads(f.read_text())
-                merged[task_id] = {**t, "feito": feito, "ts": agora}
+                update = {"feito": feito, "ts": agora}
+                if due_date is not None:
+                    if due_date:
+                        update["due_date"] = due_date
+                merged[task_id] = {**t, **update}
             except Exception:
                 return _sorted_tasks(merged)
         _salvar_cache_tasks(merged)
         _gravar_task_local(merged[task_id])
         _tpin(merged[task_id])
+    return _sorted_tasks(merged)
+
+
+def atualizar_task_due_date(task_id, due_date):
+    """Atualiza apenas a data de vencimento de uma task."""
+    with _TASKS_LOCK:
+        merged = _ler_cache_tasks()
+        if task_id in merged:
+            if due_date:
+                merged[task_id] = {**merged[task_id], "due_date": due_date, "ts": int(time.time() * 1000)}
+            else:
+                task = merged[task_id]
+                task.pop("due_date", None)
+                task["ts"] = int(time.time() * 1000)
+                merged[task_id] = task
+            _salvar_cache_tasks(merged)
+            _gravar_task_local(merged[task_id])
+            _tpin(merged[task_id])
+        else:
+            f = _TASKS_DIR / f"{task_id}.json"
+            try:
+                t = json.loads(f.read_text())
+                if due_date:
+                    t = {**t, "due_date": due_date, "ts": int(time.time() * 1000)}
+                else:
+                    t.pop("due_date", None)
+                    t["ts"] = int(time.time() * 1000)
+                merged[task_id] = t
+                _salvar_cache_tasks(merged)
+                _gravar_task_local(t)
+                _tpin(t)
+            except Exception:
+                pass
     return _sorted_tasks(merged)
 
 

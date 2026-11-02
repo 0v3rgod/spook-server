@@ -565,6 +565,9 @@ class SpookOverlay(Gtk.Application):
         self.pad_mgr.task_add_cb = self._tarefa_adicionar
         self.pad_mgr.task_toggle_cb = self._tarefa_marcar
         self.pad_mgr.task_del_cb = self._tarefa_apagar
+        self.pad_mgr.task_due_cb = self._tarefa_atualizar_due_date
+        self.pad_mgr.finance_listar_cb = self._finance_pedir
+        self.pad_mgr.finance_parcela_cb = self._finance_parcela_toggle
         pagina_pad = self.pad_mgr.criar_pagina()
         tabs.append_page(pagina_pad, _aba_icone_texto("note", "PAD"))
         self._pagina_leitor = pagina_leitor
@@ -2017,6 +2020,43 @@ class SpookOverlay(Gtk.Application):
             pass
         self._bg(lambda: (hub_store.apagar_task(task_id), self._tarefas_do_hub()))
 
+    def _tarefa_atualizar_due_date(self, task_id, due_date):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("task_due_date", {"id": task_id, "due_date": due_date})
+                return
+        except Exception:
+            pass
+        self._bg(lambda: (hub_store.atualizar_task_due_date(task_id, due_date), self._tarefas_do_hub()))
+
+    # ── FINANÇAS (dentro do PAD) ──
+    def _finance_pedir(self):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("finance_listar", {})
+                return
+        except Exception:
+            pass
+        self._finance_do_hub()
+
+    def _finance_do_hub(self):
+        def _ler():
+            try:
+                expenses = hub_store.listar_expenses()
+            except Exception:
+                expenses = []
+            GLib.idle_add(lambda: (self.pad_mgr.aplicar_finance(expenses), False)[1])
+        self._bg(_ler)
+
+    def _finance_parcela_toggle(self, expense_id, parcela_index, paga):
+        try:
+            if self.sio and getattr(self.sio, "connected", False):
+                self.sio.emit("parcela_atualizada", {"expense_id": expense_id, "parcela_index": parcela_index, "paga": bool(paga)})
+                return
+        except Exception:
+            pass
+        self._bg(lambda: (hub_store.atualizar_parcela(expense_id, parcela_index, {"paga": bool(paga)}), self._finance_do_hub()))
+
     def _enviar_ai(self, entry):
         texto = entry.get_text().strip()
         if not texto or self.ai_loading:
@@ -2046,7 +2086,7 @@ class SpookOverlay(Gtk.Application):
             if self.ai_session_id:
                 envio["sessao_id"] = self.ai_session_id
             sio.emit("chat_ia_perguntar", envio, namespace="/ia")
-            sio.wait(timeout=60)
+            sio.wait(timeout=240)  # agente local pode rodar scans longos
             self.ai_messages.append({"role": "ai", "text": result[1] if result[0] else f"Error: {result[1]}"})
         except ImportError:
             import urllib.request

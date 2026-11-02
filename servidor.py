@@ -70,6 +70,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Agente local (Ollama no Arch). Se importar falhar, o servidor continua
+# funcionando e a IA cai no Groq (fallback legado).
+# Aprovação: o app pede a ação, então aqui é 'auto' (o shell tem allowlist e as
+# ferramentas de pentest só tocam no alvo pedido). Em uso interativo no terminal,
+# tools.py pergunta (modo 'ask').
+os.environ.setdefault("SPOOK_APROVACAO", "auto")
+try:
+    from agent import runtime as agente_runtime
+    AGENTE_LOCAL = True
+except Exception as _erro_agente:  # noqa: BLE001
+    AGENTE_LOCAL = False
+    print(f"[AGENTE] indisponível no import: {_erro_agente}", flush=True)
+
 try:
     from servidor_bluetooth import CAMINHO_PERFIL, UUID_PENTESTLINK, PerfilPentestLink
 except Exception:
@@ -129,10 +142,9 @@ def carregar_configuracao():
 
 
 CONFIGURACAO = carregar_configuracao()
-# O "relay" de hoje e' o hub do Redmi (app SPOOK SERVER, porta 5000). O nome
-# antigo (Oracle Relay) ficou nos prints e confundia: nao ha mais Oracle no
-# caminho do chat/tasks.
-HUB_URL = "http://100.79.55.68:5000"
+# O "relay" é a VM Oracle (spook-relay.service), hub do chat/tasks/IA.
+# (antes apontava para o Redmi 100.79.55.68, aposentado em 2026-09-16)
+HUB_URL = os.getenv("SPOOK_HUB_URL", "http://100.70.88.101:5000")
 relay_bridge_sio = None
 FILEBROWSER_URL = CONFIGURACAO.get("FILEBROWSER_URL", "").rstrip("/")
 FILEBROWSER_USERNAME = CONFIGURACAO.get("FILEBROWSER_USERNAME", "")
@@ -408,22 +420,60 @@ def montar_instrucoes_ia():
 
 @socketio.on("connect", namespace="/ia")
 def conectar_ia():
-    if not GROQ_API_KEY:
-        return False
+    if AGENTE_LOCAL:
+        try:
+            if agente_runtime.disponivel():
+                return True
+        except Exception:
+            pass
+    if GROQ_API_KEY:
+        return True
+    return False
+
+
+def _responder_com_agente_local(pergunta, sessao_id, usuario, sid, namespace="/ia"):
+    """Roda o agente local numa thread (não bloqueia o servidor) e responde."""
+    def trabalho():
+        try:
+            print(f"[AGENTE] pergunta ({usuario}): {pergunta[:120]}", flush=True)
+            resposta = agente_runtime.perguntar(pergunta, usuario=usuario)
+            print(f"[AGENTE] resposta: {resposta[:160]}", flush=True)
+            socketio.emit(
+                "chat_ia_resposta",
+                {"ok": True, "resposta": resposta, "sessao_id": sessao_id, "motor": "local"},
+                to=sid,
+                namespace=namespace,
+            )
+        except Exception as erro:  # noqa: BLE001
+            print(f"[AGENTE ERRO] {erro}", flush=True)
+            socketio.emit(
+                "chat_ia_resposta",
+                {"ok": False, "resposta": f"Agente local falhou: {erro}", "sessao_id": sessao_id},
+                to=sid,
+                namespace=namespace,
+            )
+
+    threading.Thread(target=trabalho, daemon=True).start()
 
 
 @socketio.on("chat_ia_perguntar", namespace="/ia")
 def responder_chat_ia(dados):
     pergunta = str((dados or {}).get("pergunta", "")).strip()
     sessao_id = str((dados or {}).get("sessao_id", "")).strip() or request.sid
-    if not GROQ_API_KEY:
-        emit("chat_ia_resposta", {"ok": False, "resposta": "IA não configurada. Adicione GROQ_API_KEY no servidor."})
-        return
+    usuario = str((dados or {}).get("usuario", "")).strip() or "taylor"
     if not pergunta:
         emit("chat_ia_resposta", {"ok": False, "resposta": "Envie uma pergunta."})
         return
     if len(pergunta) > 4000:
         emit("chat_ia_resposta", {"ok": False, "resposta": "Pergunta muito longa (máximo: 4000 caracteres)."})
+        return
+    # 1) agente local (Ollama) — sem token, sem internet
+    if AGENTE_LOCAL and agente_runtime.disponivel():
+        _responder_com_agente_local(pergunta, sessao_id, usuario, request.sid)
+        return
+    # 2) fallback legado (Groq)
+    if not GROQ_API_KEY:
+        emit("chat_ia_resposta", {"ok": False, "resposta": "IA local offline (Ollama parado) e sem GROQ_API_KEY."})
         return
     try:
         resposta = requests.post(
@@ -867,13 +917,14 @@ def task_criar(dados):
     titulo = str((dados or {}).get("titulo", "")).strip()
     if not titulo:
         return
+    due_date = (dados or {}).get("due_date")
     try:
-        nova, lista = hub_store.criar_task(titulo)
+        nova, lista = hub_store.criar_task(titulo, due_date=due_date or 0)
         emit("task_nova", nova, broadcast=True)
         # Avisa o hub do Redmi
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
-                relay_bridge_sio.emit("task_nova", {"titulo": titulo})
+                relay_bridge_sio.emit("task_nova", {"titulo": titulo, "due_date": due_date or 0})
         except Exception: pass
     except Exception as e:
         emit("task_erro", {"erro": str(e)})
@@ -885,14 +936,34 @@ def task_atualizar(dados):
     if not tid:
         return
     feito = bool((dados or {}).get("feito", False))
+    due_date = (dados or {}).get("due_date")
     try:
-        lista = hub_store.marcar_task(tid, feito)
+        lista = hub_store.marcar_task(tid, feito, due_date=due_date)
         t = next((x for x in lista if x.get("id") == tid), {})
         emit("task_atualizada", t, broadcast=True)
         # Avisa o hub do Redmi
         try:
             if relay_bridge_sio and relay_bridge_sio.connected:
-                relay_bridge_sio.emit("task_atualizada", {"id": tid, "feito": feito})
+                relay_bridge_sio.emit("task_atualizada", {"id": tid, "feito": feito, "due_date": due_date})
+        except Exception: pass
+    except Exception as e:
+        emit("task_erro", {"erro": str(e)})
+
+
+@socketio.on("task_due_date")
+def task_due_date(dados):
+    """Atualiza apenas a data de vencimento de uma task."""
+    tid = str((dados or {}).get("id", ""))
+    if not tid:
+        return
+    due_date = (dados or {}).get("due_date")
+    try:
+        lista = hub_store.atualizar_task_due_date(tid, due_date)
+        t = next((x for x in lista if x.get("id") == tid), {})
+        emit("task_atualizada", t, broadcast=True)
+        try:
+            if relay_bridge_sio and relay_bridge_sio.connected:
+                relay_bridge_sio.emit("task_atualizada", {"id": tid, "due_date": due_date})
         except Exception: pass
     except Exception as e:
         emit("task_erro", {"erro": str(e)})
@@ -913,8 +984,100 @@ def task_apagar(dados):
         print(f"[SERVER] erro ao apagar task: {e}")
 
 
+# ============================== FINANCE SOCKET HANDLERS ==============================
+@socketio.on("finance_listar")
+def finance_listar(dados=None):
+    try:
+        emit("finance_lista", {"expenses": hub_store.listar_expenses()})
+    except Exception as e:
+        emit("finance_lista", {"expenses": [], "erro": str(e)})
+
+
+@socketio.on("finance_nova")
+def finance_criar(dados):
+    expense_data = dados or {}
+    if not expense_data.get("title") and not expense_data.get("titulo"):
+        return
+    try:
+        nova, lista = hub_store.criar_expense(expense_data)
+        emit("finance_nova", nova, broadcast=True)
+        try:
+            if relay_bridge_sio and relay_bridge_sio.connected:
+                relay_bridge_sio.emit("finance_nova", nova)
+        except Exception: pass
+    except Exception as e:
+        emit("finance_erro", {"erro": str(e)})
+
+
+@socketio.on("finance_atualizada")
+def finance_atualizar(dados):
+    fid = str((dados or {}).get("id", ""))
+    if not fid:
+        return
+    updates = {k: v for k, v in (dados or {}).items() if k != "id"}
+    try:
+        lista = hub_store.atualizar_expense(fid, updates)
+        e = next((x for x in lista if x.get("id") == fid), {})
+        emit("finance_atualizada", e, broadcast=True)
+        try:
+            if relay_bridge_sio and relay_bridge_sio.connected:
+                relay_bridge_sio.emit("finance_atualizada", {"id": fid, **updates})
+        except Exception: pass
+    except Exception as e:
+        emit("finance_erro", {"erro": str(e)})
+
+
+@socketio.on("finance_apagada")
+def finance_apagar(dados):
+    fid = str((dados or {}).get("id", ""))
+    try:
+        hub_store.apagar_expense(fid)
+        emit("finance_apagada", {"id": fid}, broadcast=True)
+        try:
+            if relay_bridge_sio and relay_bridge_sio.connected:
+                relay_bridge_sio.emit("finance_apagada", {"id": fid})
+        except Exception: pass
+    except Exception as e:
+        print(f"[SERVER] erro ao apagar expense: {e}")
+
+
+@socketio.on("parcela_atualizada")
+def parcela_atualizar(dados):
+    fid = str((dados or {}).get("expense_id", ""))
+    parcela_index = int((dados or {}).get("parcela_index", -1))
+    if not fid or parcela_index < 0:
+        return
+    updates = {k: v for k, v in (dados or {}).items() if k not in ("expense_id", "parcela_index")}
+    try:
+        lista = hub_store.atualizar_parcela(fid, parcela_index, updates)
+        e = next((x for x in lista if x.get("id") == fid), {})
+        emit("finance_atualizada", e, broadcast=True)
+        try:
+            if relay_bridge_sio and relay_bridge_sio.connected:
+                relay_bridge_sio.emit("parcela_atualizada", {"expense_id": fid, "parcela_index": parcela_index, **updates})
+        except Exception: pass
+    except Exception as e:
+        emit("finance_erro", {"erro": str(e)})
+
+
+@socketio.on("finance_calendario")
+def finance_calendario(dados):
+    """Retorna parcelas agrupadas por dia para um mês específico."""
+    ano = int((dados or {}).get("ano", 0))
+    mes = int((dados or {}).get("mes", 0))
+    if not ano or not mes:
+        emit("finance_calendario", {"parcelas_por_dia": {}})
+        return
+    try:
+        parcelas = hub_store.listar_parcelas_por_mes(ano, mes)
+        emit("finance_calendario", {"parcelas_por_dia": parcelas, "ano": ano, "mes": mes})
+    except Exception as e:
+        emit("finance_calendario", {"parcelas_por_dia": {}, "erro": str(e)})
+
+
 _registro_chat = {"ids": set()}
 _registro_tasks = {"ids": set()}
+_registro_finance = {"ids": set()}
 
 
 def monitorar_chat():
@@ -957,6 +1120,31 @@ def monitorar_tasks():
                     socketio.emit("task_atualizada", local)
         _registro_tasks["ids"] = ids_atuais
         _registro_tasks["tasks"] = tasks
+
+
+def monitorar_finance():
+    while True:
+        time.sleep(2)
+        try:
+            expenses = hub_store.listar_expenses()
+        except Exception:
+            continue
+        ids_atuais = {e.get("id") for e in expenses}
+        for e in expenses:
+            if e.get("id") not in _registro_finance["ids"]:
+                socketio.emit("finance_nova", e)
+        removidas = _registro_finance["ids"] - ids_atuais
+        for rid in removidas:
+            socketio.emit("finance_apagada", {"id": rid})
+        atualizados = _registro_finance["ids"] & ids_atuais
+        for fid in atualizados:
+            local = next((e for e in expenses if e.get("id") == fid), None)
+            if local and fid in _registro_finance["ids"]:
+                prev = next((e for e in _registro_finance.get("expenses", []) if e.get("id") == fid), None)
+                if prev and local.get("em", 0) != prev.get("em", 0):
+                    socketio.emit("finance_atualizada", local)
+        _registro_finance["ids"] = ids_atuais
+        _registro_finance["expenses"] = expenses
 
 
 @socketio.on("bateria_celular")
@@ -1809,6 +1997,24 @@ def iniciar_relay_bridge():
             sio.emit("info_arch", coletar_info_servidor())
         except Exception as e:
             print(f"[BRIDGE] info_arch falhou: {e}", flush=True)
+
+        def batimento():
+            """Avisa o relay que o agente local está vivo (para ele encaminhar a IA)."""
+            while True:
+                try:
+                    if sio.connected:
+                        sio.emit(
+                            "agente_online",
+                            {
+                                "online": bool(AGENTE_LOCAL and agente_runtime.disponivel()),
+                                "modelo": agente_runtime.info().get("modelo") if AGENTE_LOCAL else None,
+                            },
+                        )
+                except Exception:
+                    pass
+                time.sleep(45)
+
+        threading.Thread(target=batimento, daemon=True).start()
     @sio.on("chat_nova")
     def on_chat_nova(dados):
         if dados.get("from") != "arch":
@@ -1825,6 +2031,18 @@ def iniciar_relay_bridge():
     @sio.on("task_apagada")
     def on_task_apagada(dados):
         socketio.emit("task_apagada", dados)
+    @sio.on("finance_nova")
+    def on_finance_nova(dados):
+        socketio.emit("finance_nova", dados)
+    @sio.on("finance_atualizada")
+    def on_finance_atualizada(dados):
+        socketio.emit("finance_atualizada", dados)
+    @sio.on("finance_apagada")
+    def on_finance_apagada(dados):
+        socketio.emit("finance_apagada", dados)
+    @sio.on("parcela_atualizada")
+    def on_parcela_atualizada(dados):
+        socketio.emit("parcela_atualizada", dados)
     @sio.on("ia_executar_scan")
     def on_ia_executar_scan(dados):
         try:
@@ -1876,6 +2094,36 @@ def iniciar_relay_bridge():
                 sio.emit("ia_obter_info", {"sessao_id": sessao_id, "resultado": resultado, "pergunta_original": pergunta_original})
         except Exception as e:
             print(f"[BRIDGE IA ERRO] ia_obter_info: {e}", flush=True)
+    @sio.on("ia_agente_perguntar")
+    def on_ia_agente_perguntar(dados):
+        """Relay delega a pergunta para o agente local (Ollama no Arch)."""
+        dados = dados or {}
+        pergunta = str(dados.get("pergunta", "")).strip()
+        usuario = str(dados.get("usuario", "") or "taylor").strip()
+        pedido_id = str(dados.get("pedido_id", "") or "")
+        sessao_id = str(dados.get("sessao_id", "") or "")
+
+        def trabalho():
+            try:
+                print(f"[BRIDGE AGENTE] pergunta ({usuario}): {pergunta[:120]}", flush=True)
+                if not (AGENTE_LOCAL and agente_runtime.disponivel()):
+                    raise RuntimeError("agente local offline")
+                resposta = agente_runtime.perguntar(pergunta, usuario=usuario)
+                pacote = {"ok": True, "resposta": resposta, "pedido_id": pedido_id,
+                          "sessao_id": sessao_id, "motor": "local"}
+                print(f"[BRIDGE AGENTE] resposta: {resposta[:160]}", flush=True)
+            except Exception as e:  # noqa: BLE001
+                print(f"[BRIDGE AGENTE ERRO] {e}", flush=True)
+                pacote = {"ok": False, "resposta": f"Agente local falhou: {e}",
+                          "pedido_id": pedido_id, "sessao_id": sessao_id}
+            try:
+                if sio.connected:
+                    sio.emit("ia_agente_resposta", pacote)
+            except Exception as e:  # noqa: BLE001
+                print(f"[BRIDGE AGENTE ERRO] emit: {e}", flush=True)
+
+        threading.Thread(target=trabalho, daemon=True).start()
+
     def run_bridge():
         while True:
             try:
@@ -1920,6 +2168,7 @@ if __name__ == "__main__":
         threading.Thread(target=emitir_metricas_periodicas, daemon=True).start()
         threading.Thread(target=monitorar_chat, daemon=True).start()
         threading.Thread(target=monitorar_tasks, daemon=True).start()
+        threading.Thread(target=monitorar_finance, daemon=True).start()
         threading.Thread(target=_monitorar_notificacoes, daemon=True).start()
         threading.Thread(target=_loop_localizacao_arch, daemon=True).start()
         iniciar_relay_bridge()

@@ -155,6 +155,168 @@ progressbar.pad-prog > trough {
 progressbar.pad-prog > trough > progress {
   background: #8BE04E; border-radius: 999px; min-height: 4px; border: none;
 }
+
+/* ---- FINANCE CALENDAR ---- */
+.pad-fin-cal-cell {
+  background: transparent;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  padding: 4px;
+  min-width: 40px;
+  min-height: 40px;
+  transition: all 120ms ease;
+}
+
+.pad-fin-cal-cell-today {
+  background: rgba(255, 77, 154, 0.18);
+  border: 1px solid #FF4D9A;
+}
+
+.pad-fin-cal-cell-due {
+  background: rgba(255, 196, 0, 0.12);
+  border: 1px solid rgba(255, 196, 0, 0.5);
+}
+
+.pad-fin-cal-cell-overdue {
+  background: rgba(255, 196, 0, 0.12);
+  border: 1px solid rgba(255, 196, 0, 0.5);
+}
+
+.pad-fin-cal-cell:hover {
+  background: #1E1C2A;
+}
+
+.pad-fin-cal-day {
+  font-size: 13px;
+  font-weight: 500;
+  color: #F4F1FF;
+}
+
+.pad-fin-cal-day-today {
+  color: #FF4D9A;
+  font-weight: 700;
+}
+
+.pad-fin-cal-dots-box {
+  margin-top: 2px;
+}
+
+.pad-fin-cal-dot-unpaid {
+  background: #FF5C6C;
+  border-radius: 50%;
+  min-width: 6px;
+  min-height: 6px;
+  margin: 0 1px;
+}
+
+.pad-fin-cal-dot-paid {
+  background: #5CE1E6;
+  border-radius: 50%;
+  min-width: 6px;
+  min-height: 6px;
+  margin: 0 1px;
+}
+
+.pad-fin-cal-plus {
+  font-size: 7px;
+  color: #8A8F98;
+  margin-left: 2px;
+}
+
+.pad-fin-cal-header {
+  font-size: 8px;
+  font-weight: 700;
+  color: #8A8F98;
+  padding: 4px 0;
+}
+
+.pad-fin-parcelas-card {
+  background: #16141F;
+  border-radius: 12px;
+  border: 1px solid #3A3648;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+}
+
+.pad-fin-parcelas-card:hover {
+  background: #1E1C2A;
+  border-color: #FF4D9A;
+}
+
+.pad-fin-parcela-tit {
+  font-size: 12px;
+  font-weight: 700;
+  color: #F4F1FF;
+}
+
+.pad-fin-parcela-meta {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 9px;
+  color: #8A8F98;
+}
+
+.pad-fin-parcela-valor {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #FF4D9A;
+}
+
+.pad-fin-parcela-valor-pago {
+  color: #5CE1E6;
+}
+
+.pad-fin-parcela-check {
+  background: transparent;
+  border: 1px solid #3A3648;
+  border-radius: 4px;
+  min-width: 20px;
+  min-height: 20px;
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 10px;
+  color: #8A8F98;
+  transition: all 100ms ease;
+}
+
+.pad-fin-parcela-check:hover {
+  background: rgba(255, 77, 154, 0.14);
+  border-color: #FF4D9A;
+  color: #FF4D9A;
+}
+
+.pad-fin-parcela-check-on {
+  background: rgba(92, 225, 230, 0.18);
+  border-color: #5CE1E6;
+  color: #5CE1E6;
+}
+
+.pad-fin-cal-mes {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #FF4D9A;
+}
+
+.pad-fin-cal-nav {
+  background: transparent;
+  background-image: none;
+  color: #8A8F98;
+  border: 1px solid #3A3648;
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 9px;
+  font-weight: 700;
+  box-shadow: none;
+  outline: none;
+  transition: all 120ms ease;
+}
+
+.pad-fin-cal-nav:hover {
+  background: transparent;
+  color: #F4F1FF;
+  border-color: #6E6A81;
+  box-shadow: none;
+}
 """
 
 # ============================== HELPERS ==============================
@@ -394,6 +556,18 @@ class SpookPadManager:
         self.task_add_cb = None
         self.task_toggle_cb = None
         self.task_del_cb = None
+        self.task_due_cb = None
+
+        # calendário tasks
+        self.task_stack = None
+        self.seg_task_lista = None
+        self.seg_task_cal = None
+        self.cal_box = None
+        self.cal_grid = None
+        self.cal_mes_ano = None
+        self.cal_tasks_box = None
+        self._cal_mes_atual = None
+        self._due_dialog_task = None
 
         # editor
         self.ed_id = None
@@ -766,7 +940,7 @@ class SpookPadManager:
         self.busca.add_css_class("spook-input")
         self.busca.set_placeholder_text("search notes…")
         self.busca.connect("changed", self._ao_buscar)
-        # NOTAS | TAREFAS (a janela de tasks vive dentro do PAD)
+        # NOTAS | TAREFAS | FINANÇAS (a janela de tasks/finance vive dentro do PAD)
         seg = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.seg_notas = Gtk.Button(label="NOTES")
         self.seg_notas.add_css_class("pad-seg-btn")
@@ -776,6 +950,10 @@ class SpookPadManager:
         self.seg_tarefas.add_css_class("pad-seg-btn")
         self.seg_tarefas.connect("clicked", lambda *_: self._mostrar_vista("tarefas"))
         seg.append(self.seg_tarefas)
+        self.seg_finance = Gtk.Button(label="FINANCE")
+        self.seg_finance.add_css_class("pad-seg-btn")
+        self.seg_finance.connect("clicked", lambda *_: self._mostrar_vista("finance"))
+        seg.append(self.seg_finance)
         caixa.append(seg)
 
         self.pilha_vistas = Gtk.Stack()
@@ -797,6 +975,7 @@ class SpookPadManager:
 
         self.pilha_vistas.add_named(notas_box, "notas")
         self.pilha_vistas.add_named(self._caixa_tarefas(), "tarefas")
+        self.pilha_vistas.add_named(self._caixa_finance(), "finance")
         self.pilha_vistas.set_visible_child_name("notas")
         self._atualizar_seg("notas")
         caixa.append(self.pilha_vistas)
@@ -806,6 +985,7 @@ class SpookPadManager:
     def _caixa_tarefas(self):
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
 
+        # Header com contador e toggle LISTA/CALENDÁRIO
         topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.lbl_tasks = Gtk.Label(label="0 TASKS", xalign=0)
         self.lbl_tasks.add_css_class("pad-meta")
@@ -813,6 +993,18 @@ class SpookPadManager:
         espaco = Gtk.Box()
         espaco.set_hexpand(True)
         topo.append(espaco)
+
+        # Toggle LISTA | CALENDÁRIO
+        self.seg_task_lista = Gtk.Button(label="LIST")
+        self.seg_task_lista.add_css_class("pad-seg-btn")
+        self.seg_task_lista.connect("clicked", lambda *_: self._mostrar_task_vista("lista"))
+        topo.append(self.seg_task_lista)
+
+        self.seg_task_cal = Gtk.Button(label="CALENDAR")
+        self.seg_task_cal.add_css_class("pad-seg-btn")
+        self.seg_task_cal.connect("clicked", lambda *_: self._mostrar_task_vista("calendario"))
+        topo.append(self.seg_task_cal)
+
         btn_refresh = Gtk.Button(label="↻")
         btn_refresh.add_css_class("spook-btn")
         btn_refresh.add_css_class("spook-btn-text-sm")
@@ -841,23 +1033,804 @@ class SpookPadManager:
         linha.append(btn_add)
         caixa.append(linha)
 
+        # Stack para LISTA e CALENDÁRIO
+        self.task_stack = Gtk.Stack()
+        self.task_stack.set_vexpand(True)
+        self.task_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+
+        # Lista de tasks
         self.tasks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scroll.set_vexpand(True)
-        scroll.set_child(self.tasks_box)
-        caixa.append(scroll)
+        scroll_lista = Gtk.ScrolledWindow()
+        scroll_lista.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll_lista.set_vexpand(True)
+        scroll_lista.set_child(self.tasks_box)
+        self.task_stack.add_named(scroll_lista, "lista")
+
+        # Calendário
+        self.cal_box = self._criar_calendario_tarefas()
+        self.task_stack.add_named(self.cal_box, "calendario")
+
+        self.task_stack.set_visible_child_name("lista")
+        caixa.append(self.task_stack)
+
+        self._atualizar_task_seg("lista")
         return caixa
 
+    # ------------------------------------------------------------ finanças
+    def _caixa_finance(self):
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        caixa.add_css_class("spook-root")
+
+        # Header com contador e toggle LISTA/CALENDÁRIO
+        topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_finance = Gtk.Label(label="0 EXPENSES", xalign=0)
+        self.lbl_finance.add_css_class("pad-meta")
+        topo.append(self.lbl_finance)
+        espaco = Gtk.Box()
+        espaco.set_hexpand(True)
+        topo.append(espaco)
+
+        # Toggle LISTA | CALENDÁRIO
+        self.seg_finance_lista = Gtk.Button(label="LIST")
+        self.seg_finance_lista.add_css_class("pad-seg-btn")
+        self.seg_finance_lista.connect("clicked", lambda *_: self._mostrar_finance_vista("lista"))
+        topo.append(self.seg_finance_lista)
+
+        self.seg_finance_cal = Gtk.Button(label="CALENDAR")
+        self.seg_finance_cal.add_css_class("pad-seg-btn")
+        self.seg_finance_cal.connect("clicked", lambda *_: self._mostrar_finance_vista("calendario"))
+        topo.append(self.seg_finance_cal)
+
+        btn_refresh = Gtk.Button(label="↻")
+        btn_refresh.add_css_class("spook-btn")
+        btn_refresh.add_css_class("spook-btn-text-sm")
+        btn_refresh.set_tooltip_text("Refresh finance")
+        btn_refresh.connect("clicked", lambda *_: self.pedir_finance())
+        topo.append(btn_refresh)
+        caixa.append(topo)
+
+        # Stack para LISTA e CALENDÁRIO
+        self.finance_stack = Gtk.Stack()
+        self.finance_stack.set_vexpand(True)
+        self.finance_stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+
+        # Lista de despesas
+        self.finance_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        scroll_lista = Gtk.ScrolledWindow()
+        scroll_lista.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll_lista.set_vexpand(True)
+        scroll_lista.set_child(self.finance_box)
+        self.finance_stack.add_named(scroll_lista, "lista")
+
+        # Calendário
+        self.fin_cal_box = self._criar_calendario_finance()
+        self.finance_stack.add_named(self.fin_cal_box, "calendario")
+
+        self.finance_stack.set_visible_child_name("calendario")
+        caixa.append(self.finance_stack)
+
+        self._atualizar_finance_seg("calendario")
+        return caixa
+
+    def _criar_calendario_finance(self):
+        """Cria o widget do calendário mensal com marcadores de vencimento de parcelas."""
+        import datetime
+
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        caixa.add_css_class("spook-root")
+
+        # Header do calendário
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.fin_cal_mes_ano = Gtk.Label(label="", xalign=0)
+        self.fin_cal_mes_ano.add_css_class("pad-fin-cal-mes")
+        self.fin_cal_mes_ano.set_hexpand(True)
+        hdr.append(self.fin_cal_mes_ano)
+
+        btn_prev = Gtk.Button(label="←")
+        btn_prev.add_css_class("pad-fin-cal-nav")
+        btn_prev.connect("clicked", lambda *_: self._fin_cal_mudar_mes(-1))
+        hdr.append(btn_prev)
+
+        btn_hoje = Gtk.Button(label="TODAY")
+        btn_hoje.add_css_class("pad-fin-cal-nav")
+        btn_hoje.connect("clicked", lambda *_: self._fin_cal_ir_hoje())
+        hdr.append(btn_hoje)
+
+        btn_next = Gtk.Button(label="→")
+        btn_next.add_css_class("pad-fin-cal-nav")
+        btn_next.connect("clicked", lambda *_: self._fin_cal_mudar_mes(1))
+        hdr.append(btn_next)
+
+        caixa.append(hdr)
+
+        # Grade do calendário
+        self.fin_cal_grid = Gtk.Grid()
+        self.fin_cal_grid.set_row_spacing(2)
+        self.fin_cal_grid.set_column_spacing(2)
+        self.fin_cal_grid.set_margin_top(8)
+        self.fin_cal_grid.set_margin_bottom(8)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)
+        scrolled.set_child(self.fin_cal_grid)
+        caixa.append(scrolled)
+
+        # Lista de parcelas com vencimento (abaixo do calendário)
+        self.fin_cal_parcelas_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        fin_cal_parcelas_scroll = Gtk.ScrolledWindow()
+        fin_cal_parcelas_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        fin_cal_parcelas_scroll.set_vexpand(True)
+        fin_cal_parcelas_scroll.set_child(self.fin_cal_parcelas_box)
+        caixa.append(fin_cal_parcelas_scroll)
+
+        # Inicializa mês atual
+        self._fin_cal_mes_atual = datetime.date.today().replace(day=1)
+        return caixa
+
+    def _atualizar_finance_seg(self, vista):
+        for botao, nome in ((self.seg_finance_lista, "lista"), (self.seg_finance_cal, "calendario")):
+            if botao is None:
+                continue
+            botao.remove_css_class("pad-seg-on")
+            botao.remove_css_class("pad-seg-btn")
+            botao.add_css_class("pad-seg-on" if nome == vista else "pad-seg-btn")
+
+    def _mostrar_finance_vista(self, vista):
+        if self.finance_stack is not None:
+            self.finance_stack.set_visible_child_name(vista)
+        self._atualizar_finance_seg(vista)
+        if vista == "calendario":
+            self._render_finance_calendario()
+
+    def _fin_cal_mudar_mes(self, delta):
+        import datetime
+        year = self._fin_cal_mes_atual.year
+        month = self._fin_cal_mes_atual.month + delta
+        while month > 12:
+            month -= 12
+            year += 1
+        while month < 1:
+            month += 12
+            year -= 1
+        self._fin_cal_mes_atual = datetime.date(year, month, 1)
+        self._render_finance_calendario()
+
+    def _fin_cal_ir_hoje(self):
+        import datetime
+        self._fin_cal_mes_atual = datetime.date.today().replace(day=1)
+        self._render_finance_calendario()
+
+    def _render_finance_calendario(self):
+        """Renderiza o calendário mensal com marcadores de vencimento de parcelas."""
+        import datetime
+        import calendar
+
+        # Limpa grid
+        while (c := self.fin_cal_grid.get_first_child()):
+            self.fin_cal_grid.remove(c)
+
+        # Limpa lista de parcelas com vencimento
+        while (c := self.fin_cal_parcelas_box.get_first_child()):
+            self.fin_cal_parcelas_box.remove(c)
+
+        mes = self._fin_cal_mes_atual
+        self.fin_cal_mes_ano.set_text(mes.strftime("%B %Y").upper())
+
+        # Dias da semana (SUNDAY FIRST - matching Android app)
+        dias_sem = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        for col, dia in enumerate(dias_sem):
+            lbl = Gtk.Label(label=dia, xalign=0.5)
+            lbl.add_css_class("pad-fin-cal-header")
+            lbl.set_size_request(40, 24)
+            self.fin_cal_grid.attach(lbl, col, 0, 1, 1)
+
+        # Primeiro dia do mês (0=Sunday no calendar.monthcalendar com firstweekday=6)
+        import calendar as cal_mod
+        cal_mod.setfirstweekday(cal_mod.SUNDAY)
+        primeiro_dia = mes.weekday()  # 0=Mon, 6=Sun -- mas com setfirstweekday(SUNDAY) isso muda
+        # Ajuste: weekday() ainda retorna 0=Mon, entao convertemos para 0=Sun
+        primeiro_dia_dom = (primeiro_dia + 1) % 7
+        dias_no_mes = calendar.monthrange(mes.year, mes.month)[1]
+        hoje = datetime.date.today()
+
+        # Agrupa parcelas por dia do mês (apenas não pagas)
+        parcelas_por_dia = {}
+        if hasattr(self, 'expenses') and self.expenses:
+            for exp in self.expenses:
+                if exp.get("removido"):
+                    continue
+                for i, p in enumerate(exp.get("parcelas", [])):
+                    if p.get("paga"):
+                        continue
+                    due = p.get("dueDate") or p.get("due_date")
+                    if not due:
+                        continue
+                    try:
+                        dt = datetime.datetime.fromtimestamp(due / 1000).date()
+                        if dt.year == mes.year and dt.month == mes.month:
+                            parcelas_por_dia.setdefault(dt.day, []).append({
+                                "expense_id": exp["id"],
+                                "expense_title": exp.get("title") or exp.get("titulo") or "Despesa",
+                                "parcela_index": i,
+                                "valor": p.get("valor", 0),
+                                "due_date": due,
+                                "paga": p.get("paga", False),
+                            })
+                    except Exception:
+                        pass
+
+        # Preenche dias
+        dia = 1
+        for semana in range(6):
+            for col in range(7):
+                if semana == 0 and col < primeiro_dia_dom:
+                    # Dia vazio antes do primeiro dia
+                    box = Gtk.Box()
+                    box.set_size_request(40, 50)
+                    self.fin_cal_grid.attach(box, col, semana + 1, 1, 1)
+                elif dia <= dias_no_mes:
+                    # Dia válido
+                    cell = self._criar_celula_finance_calendario(dia, mes, hoje, parcelas_por_dia.get(dia, []))
+                    self.fin_cal_grid.attach(cell, col, semana + 1, 1, 1)
+                    dia += 1
+                else:
+                    # Dia vazio depois do último dia
+                    box = Gtk.Box()
+                    box.set_size_request(40, 50)
+                    self.fin_cal_grid.attach(box, col, semana + 1, 1, 1)
+
+        # Renderiza lista de parcelas com vencimento (ordenadas por data)
+        parcelas_com_venc = []
+        if hasattr(self, 'expenses') and self.expenses:
+            for exp in self.expenses:
+                if exp.get("removido"):
+                    continue
+                for i, p in enumerate(exp.get("parcelas", [])):
+                    if p.get("paga"):
+                        continue
+                    due = p.get("dueDate") or p.get("due_date")
+                    if due:
+                        parcelas_com_venc.append({
+                            "expense_id": exp["id"],
+                            "expense_title": exp.get("title") or exp.get("titulo") or "Despesa",
+                            "parcela_index": i,
+                            "valor": p.get("valor", 0),
+                            "due_date": due,
+                            "paga": p.get("paga", False),
+                        })
+        parcelas_com_venc.sort(key=lambda p: p.get("due_date", 0))
+
+        if not parcelas_com_venc:
+            lbl = Gtk.Label(label="No installments due this month", xalign=0.5)
+            lbl.add_css_class("pad-task-vazio")
+            lbl.set_vexpand(True)
+            self.fin_cal_parcelas_box.append(lbl)
+        else:
+            for p in parcelas_com_venc:
+                self.fin_cal_parcelas_box.append(self._card_parcela_calendario(p))
+
+    def _criar_celula_finance_calendario(self, dia, mes, hoje, parcelas_dia):
+        import datetime
+        import time as time_mod
+
+        eh_hoje = (dia == hoje.day and mes.month == hoje.month and mes.year == hoje.year)
+        tem_venc = len(parcelas_dia) > 0
+        now_ms = int(time_mod.time() * 1000)
+        tem_atrasada = any(
+            p.get("due_date", 0) < now_ms
+            for p in parcelas_dia
+        )
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_size_request(40, 40)
+        box.set_valign(Gtk.Align.START)
+        box.set_halign(Gtk.Align.FILL)
+        box.add_css_class("pad-fin-cal-cell")
+
+        if eh_hoje:
+            box.add_css_class("pad-fin-cal-cell-today")
+        elif tem_atrasada:
+            box.add_css_class("pad-fin-cal-cell-overdue")
+        elif tem_venc:
+            box.add_css_class("pad-fin-cal-cell-due")
+
+        lbl_dia = Gtk.Label(label=str(dia), xalign=0.5)
+        lbl_dia.add_css_class("pad-fin-cal-day")
+        if eh_hoje:
+            lbl_dia.add_css_class("pad-fin-cal-day-today")
+        box.append(lbl_dia)
+
+        # Marcadores de parcelas (máx 3 bolinhas) - caixas coloridas
+        if tem_venc:
+            dots_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+            dots_box.set_halign(Gtk.Align.CENTER)
+            dots_box.add_css_class("pad-fin-cal-dots-box")
+            for p in parcelas_dia[:3]:
+                dot = Gtk.Box()
+                dot.set_size_request(6, 6)
+                if p.get("paga", False):
+                    dot.add_css_class("pad-fin-cal-dot-paid")
+                else:
+                    if p.get("due_date", 0) < now_ms:
+                        dot.add_css_class("pad-fin-cal-dot-unpaid")
+                    else:
+                        dot.add_css_class("pad-fin-cal-dot-unpaid")
+                dots_box.append(dot)
+            if len(parcelas_dia) > 3:
+                mais = Gtk.Label(label=f"+{len(parcelas_dia)-3}", xalign=0.5)
+                mais.add_css_class("pad-fin-cal-plus")
+                dots_box.append(mais)
+            box.append(dots_box)
+
+        return box
+
+    def _card_parcela_calendario(self, p):
+        """Card de parcela para a lista abaixo do calendário."""
+        import time as time_mod
+        atrasada = p.get("due_date", 0) < int(time_mod.time() * 1000)
+
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        card.add_css_class("pad-fin-parcelas-card")
+
+        conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        conteudo.set_hexpand(True)
+
+        # Título da despesa + número da parcela
+        titulo = Gtk.Label(label=f'{p["expense_title"]} · Installment {p["parcela_index"]+1}', xalign=0, wrap=True)
+        titulo.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        titulo.add_css_class("pad-fin-parcela-tit")
+        conteudo.append(titulo)
+
+        meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+
+        # Valor
+        valor_lbl = Gtk.Label(label=f'$ {p["valor"]:,.2f}'.replace(",", "X").replace(".", ",").replace("X", "."), xalign=0)
+        valor_lbl.add_css_class("pad-fin-parcela-meta")
+        if atrasada:
+            valor_lbl.add_css_class("pad-fin-parcela-valor")
+        else:
+            valor_lbl.add_css_class("pad-fin-parcela-valor-pago")
+        meta.append(valor_lbl)
+
+        # Data de vencimento
+        from datetime import datetime as dt
+        try:
+            due_str = dt.fromtimestamp(p["due_date"] / 1000).strftime("%m/%d")
+            due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+            due_lbl.add_css_class("pad-fin-parcela-meta")
+            if atrasada:
+                due_lbl.add_css_class("spook-err")
+            else:
+                due_lbl.add_css_class("spook-warn")
+            meta.append(due_lbl)
+        except Exception:
+            pass
+
+        conteudo.append(meta)
+        card.append(conteudo)
+
+        # Botão para marcar como paga (toggle)
+        chk = Gtk.Button()
+        chk.set_valign(Gtk.Align.CENTER)
+        chk.add_css_class("pad-fin-parcela-check")
+        if p.get("paga", False):
+            chk.set_label("✓")
+            chk.add_css_class("pad-fin-parcela-check-on")
+        else:
+            chk.set_label("☐")
+        chk.connect("clicked", lambda b, pid=p["expense_id"], pi=p["parcela_index"]: self._toggle_parcela_button(pid, pi, b))
+        card.append(chk)
+
+        return card
+
+    def _toggle_parcela_button(self, expense_id, parcela_index, button):
+        """Toggle parcela paid state via button click."""
+        current = "✓" in button.get_label()
+        new_state = not current
+        if new_state:
+            button.set_label("✓")
+            button.add_css_class("pad-fin-parcela-check-on")
+        else:
+            button.set_label("☐")
+            button.remove_css_class("pad-fin-parcela-check-on")
+        if callable(self.finance_parcela_cb):
+            self.finance_parcela_cb(expense_id, parcela_index, new_state)
+
+    # --------------------------------------------------------------- tarefas (continua)
+    def _criar_calendario_tarefas(self):
+        """Cria o widget do calendário mensal com marcadores de vencimento."""
+        from gi.repository import Gtk
+        import datetime
+
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        caixa.add_css_class("spook-root")
+
+        # Header do calendário
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.cal_mes_ano = Gtk.Label(label="", xalign=0)
+        self.cal_mes_ano.add_css_class("pad-fin-cal-mes")
+        self.cal_mes_ano.set_hexpand(True)
+        hdr.append(self.cal_mes_ano)
+
+        btn_prev = Gtk.Button(label="←")
+        btn_prev.add_css_class("pad-fin-cal-nav")
+        btn_prev.connect("clicked", lambda *_: self._cal_mudar_mes(-1))
+        hdr.append(btn_prev)
+
+        btn_hoje = Gtk.Button(label="TODAY")
+        btn_hoje.add_css_class("pad-fin-cal-nav")
+        btn_hoje.connect("clicked", lambda *_: self._cal_ir_hoje())
+        hdr.append(btn_hoje)
+
+        btn_next = Gtk.Button(label="→")
+        btn_next.add_css_class("pad-fin-cal-nav")
+        btn_next.connect("clicked", lambda *_: self._cal_mudar_mes(1))
+        hdr.append(btn_next)
+
+        caixa.append(hdr)
+
+        # Grade do calendário
+        self.cal_grid = Gtk.Grid()
+        self.cal_grid.set_row_spacing(2)
+        self.cal_grid.set_column_spacing(2)
+        self.cal_grid.set_margin_top(8)
+        self.cal_grid.set_margin_bottom(8)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_vexpand(True)
+        scrolled.set_child(self.cal_grid)
+        caixa.append(scrolled)
+
+        # Lista de tasks com vencimento (abaixo do calendário)
+        self.cal_tasks_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        cal_tasks_scroll = Gtk.ScrolledWindow()
+        cal_tasks_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        cal_tasks_scroll.set_vexpand(True)
+        cal_tasks_scroll.set_child(self.cal_tasks_box)
+        caixa.append(cal_tasks_scroll)
+
+        # Inicializa mês atual
+        self._cal_mes_atual = datetime.date.today().replace(day=1)
+        return caixa
+
+    def _atualizar_task_seg(self, vista):
+        for botao, nome in ((self.seg_task_lista, "lista"), (self.seg_task_cal, "calendario")):
+            if botao is None:
+                continue
+            botao.remove_css_class("pad-seg-on")
+            botao.remove_css_class("pad-seg-btn")
+            botao.add_css_class("pad-seg-on" if nome == vista else "pad-seg-btn")
+
+    def _mostrar_task_vista(self, vista):
+        if self.task_stack is not None:
+            self.task_stack.set_visible_child_name(vista)
+        self._atualizar_task_seg(vista)
+        if vista == "calendario":
+            self._render_calendario()
+
+    def _cal_mudar_mes(self, delta):
+        import datetime
+        # Simple month addition without dateutil
+        year = self._cal_mes_atual.year
+        month = self._cal_mes_atual.month + delta
+        while month > 12:
+            month -= 12
+            year += 1
+        while month < 1:
+            month += 12
+            year -= 1
+        self._cal_mes_atual = datetime.date(year, month, 1)
+        self._render_calendario()
+
+    def _cal_ir_hoje(self):
+        import datetime
+        self._cal_mes_atual = datetime.date.today().replace(day=1)
+        self._render_calendario()
+
+    def _render_calendario(self):
+        """Renderiza o calendário mensal com marcadores de vencimento."""
+        import datetime
+        import calendar
+
+        # Limpa grid
+        while (c := self.cal_grid.get_first_child()):
+            self.cal_grid.remove(c)
+
+        # Limpa lista de tasks com vencimento
+        while (c := self.cal_tasks_box.get_first_child()):
+            self.cal_tasks_box.remove(c)
+
+        mes = self._cal_mes_atual
+        self.cal_mes_ano.set_text(mes.strftime("%B %Y").upper())
+
+        # Dias da semana (SUNDAY FIRST - matching Android app)
+        dias_sem = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        for col, dia in enumerate(dias_sem):
+            lbl = Gtk.Label(label=dia, xalign=0.5)
+            lbl.add_css_class("pad-fin-cal-header")
+            lbl.set_size_request(40, 24)
+            self.cal_grid.attach(lbl, col, 0, 1, 1)
+
+        # Primeiro dia do mês (Sunday-first)
+        import calendar as cal_mod
+        cal_mod.setfirstweekday(cal_mod.SUNDAY)
+        primeiro_dia = mes.weekday()  # 0=Mon, 6=Sun
+        # Convert to 0=Sun
+        primeiro_dia_dom = (primeiro_dia + 1) % 7
+        dias_no_mes = calendar.monthrange(mes.year, mes.month)[1]
+        hoje = datetime.date.today()
+
+        # Agrupa tasks por dia do mês (apenas não feitas com due_date)
+        tasks_por_dia = {}
+        for t in self.tasks:
+            if t.get("feito"):
+                continue
+            due = t.get("due_date") or t.get("dueDate")
+            if not due:
+                continue
+            try:
+                dt = datetime.datetime.fromtimestamp(due / 1000).date()
+                if dt.year == mes.year and dt.month == mes.month:
+                    tasks_por_dia.setdefault(dt.day, []).append(t)
+            except Exception:
+                pass
+
+        # Preenche dias
+        dia = 1
+        for semana in range(6):
+            for col in range(7):
+                if semana == 0 and col < primeiro_dia_dom:
+                    # Dia vazio antes do primeiro dia
+                    box = Gtk.Box()
+                    box.set_size_request(40, 40)
+                    self.cal_grid.attach(box, col, semana + 1, 1, 1)
+                elif dia <= dias_no_mes:
+                    # Dia válido
+                    cell = self._criar_celula_calendario(dia, mes, hoje, tasks_por_dia.get(dia, []))
+                    self.cal_grid.attach(cell, col, semana + 1, 1, 1)
+                    dia += 1
+                else:
+                    # Dia vazio depois do último dia
+                    box = Gtk.Box()
+                    box.set_size_request(40, 40)
+                    self.cal_grid.attach(box, col, semana + 1, 1, 1)
+
+        # Renderiza lista de tasks com vencimento (ordenadas por data)
+        tasks_com_venc = [t for t in self.tasks if not t.get("feito") and (t.get("due_date") or t.get("dueDate"))]
+        tasks_com_venc.sort(key=lambda t: t.get("due_date") or t.get("dueDate") or 0)
+
+        if not tasks_com_venc:
+            lbl = Gtk.Label(label="No tasks with due dates", xalign=0.5)
+            lbl.add_css_class("pad-task-vazio")
+            lbl.set_vexpand(True)
+            self.cal_tasks_box.append(lbl)
+        else:
+            for t in tasks_com_venc:
+                self.cal_tasks_box.append(self._card_tarefa_calendario(t))
+
+    def _criar_celula_calendario(self, dia, mes, hoje, tasks_dia):
+        import datetime
+        import time as time_mod
+
+        eh_hoje = (dia == hoje.day and mes.month == hoje.month and mes.year == hoje.year)
+        tem_venc = len(tasks_dia) > 0
+        now_ms = int(time_mod.time() * 1000)
+        tem_atrasada = any(
+            (t.get("due_date") or t.get("dueDate") or 0) < now_ms
+            for t in tasks_dia
+        )
+
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_size_request(40, 40)
+        box.set_valign(Gtk.Align.START)
+        box.set_halign(Gtk.Align.FILL)
+        box.add_css_class("pad-fin-cal-cell")
+
+        if eh_hoje:
+            box.add_css_class("pad-fin-cal-cell-today")
+        elif tem_atrasada:
+            box.add_css_class("pad-fin-cal-cell-overdue")
+        elif tem_venc:
+            box.add_css_class("pad-fin-cal-cell-due")
+
+        lbl_dia = Gtk.Label(label=str(dia), xalign=0.5)
+        lbl_dia.add_css_class("pad-fin-cal-day")
+        if eh_hoje:
+            lbl_dia.add_css_class("pad-fin-cal-day-today")
+        box.append(lbl_dia)
+
+        # Marcadores de tasks (máx 3 bolinhas) - caixas coloridas
+        if tem_venc:
+            dots_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
+            dots_box.set_halign(Gtk.Align.CENTER)
+            dots_box.add_css_class("pad-fin-cal-dots-box")
+            for t in tasks_dia[:3]:
+                dot = Gtk.Box()
+                dot.set_size_request(6, 6)
+                if (t.get("due_date") or t.get("dueDate") or 0) < now_ms:
+                    dot.add_css_class("pad-fin-cal-dot-unpaid")
+                else:
+                    dot.add_css_class("pad-fin-cal-dot-unpaid")
+                dots_box.append(dot)
+            if len(tasks_dia) > 3:
+                mais = Gtk.Label(label=f"+{len(tasks_dia)-3}", xalign=0.5)
+                mais.add_css_class("pad-fin-cal-plus")
+                dots_box.append(mais)
+            box.append(dots_box)
+
+        return box
+
+    def _card_tarefa_calendario(self, t):
+        """Card de task para a lista abaixo do calendário."""
+        feito = bool(t.get("feito"))
+        origem = str(t.get("criado_por") or "?").lower()
+        due = t.get("due_date") or t.get("dueDate")
+
+        card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        card.add_css_class("pad-task")
+        if feito:
+            card.add_css_class("pad-task-feita")
+
+        chk = Gtk.CheckButton()
+        chk.set_active(feito)
+        chk.set_valign(Gtk.Align.CENTER)
+
+        def _toggle(b, i=t.get("id"), antes=feito):
+            if bool(b.get_active()) == antes:
+                return
+            if callable(self.task_toggle_cb):
+                self.task_toggle_cb(i, bool(b.get_active()))
+
+        chk.connect("toggled", _toggle)
+        card.append(chk)
+
+        conteudo = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        conteudo.set_hexpand(True)
+        titulo = Gtk.Label(label=(t.get("titulo") or t.get("title") or "")[:300], xalign=0, wrap=True)
+        titulo.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        titulo.add_css_class("pad-task-tit")
+        conteudo.append(titulo)
+
+        meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        chip = Gtk.Label(label="POCO" if origem == "android" else ("ARCH" if origem == "arch" else origem.upper() or "?"))
+        chip.add_css_class("pad-task-chip")
+        chip.add_css_class("pad-task-chip-poco" if origem == "android" else "pad-task-chip-arch")
+        meta.append(chip)
+
+        quando = Gtk.Label(label=carimbo(_int(t.get("ts"))), xalign=0)
+        quando.add_css_class("pad-task-meta")
+        meta.append(quando)
+
+        if due:
+            from datetime import datetime as dt
+            try:
+                due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m")
+                atrasada = due < int(time.time() * 1000)
+                due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+                due_lbl.add_css_class("pad-task-meta")
+                if atrasada:
+                    due_lbl.add_css_class("spook-err")
+                else:
+                    due_lbl.add_css_class("spook-warn")
+                meta.append(due_lbl)
+            except Exception:
+                pass
+
+        conteudo.append(meta)
+        card.append(conteudo)
+
+        # Botão para definir/editar vencimento
+        cal_btn = Gtk.Button(label="📅")
+        cal_btn.add_css_class("spook-btn")
+        cal_btn.add_css_class("spook-msi-btn")
+        cal_btn.set_tooltip_text("Set due date")
+        cal_btn.connect("clicked", lambda *_: self._abrir_due_date_dialog(t))
+        card.append(cal_btn)
+
+        del_btn = Gtk.Button(label="DEL")
+        del_btn.add_css_class("spook-btn")
+        del_btn.add_css_class("spook-err-btn")
+        del_btn.add_css_class("spook-btn-text-sm")
+        del_btn.set_valign(Gtk.Align.CENTER)
+        del_btn.set_tooltip_text("Delete task")
+
+        def _del(_, i=t.get("id")):
+            if callable(self.task_del_cb):
+                self.task_del_cb(i)
+
+        del_btn.connect("clicked", _del)
+        card.append(del_btn)
+        return card
+
+    def _abrir_due_date_dialog(self, task):
+        """Dialog para definir data de vencimento."""
+        import datetime
+
+        win = Gtk.Window(title="SET DUE DATE", transient_for=self.app.janela, modal=True)
+        win.set_default_size(320, 220)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.add_css_class("spook-root")
+        box.set_margin_top(16)
+        box.set_margin_bottom(16)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+
+        titulo = Gtk.Label(label=task.get("titulo") or task.get("title") or "Task", xalign=0)
+        titulo.add_css_class("spook-title")
+        box.append(titulo)
+
+        # Date picker
+        self._due_dialog_task = task
+        cal = Gtk.Calendar()
+        cal.set_show_heading(True)
+        cal.set_show_day_names(True)
+
+        # Se já tem due_date, seleciona
+        due = task.get("due_date") or task.get("dueDate")
+        if due:
+            dt = datetime.datetime.fromtimestamp(due / 1000)
+            cal.select_month(dt.month - 1, dt.year)
+            cal.select_day(dt.day)
+        else:
+            cal.select_month(datetime.date.today().month - 1, datetime.date.today().year)
+            cal.select_day(datetime.date.today().day)
+
+        cal.connect("day-selected", self._on_due_day_selected)
+        box.append(cal)
+
+        # Botões
+        btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_row.set_halign(Gtk.Align.END)
+
+        btn_clear = Gtk.Button(label="CLEAR")
+        btn_clear.add_css_class("spook-btn")
+        btn_clear.add_css_class("spook-err-btn")
+        btn_clear.connect("clicked", lambda *_: self._due_date_clear(win, task))
+        btn_row.append(btn_clear)
+
+        btn_ok = Gtk.Button(label="SET")
+        btn_ok.add_css_class("spook-accent")
+        btn_ok.connect("clicked", lambda *_: self._due_date_confirm(win, task))
+        btn_row.append(btn_ok)
+
+        box.append(btn_row)
+        win.set_child(box)
+        win.present()
+
+    def _on_due_day_selected(self, cal):
+        pass  # Apenas atualiza a seleção visual
+
+    def _due_date_clear(self, win, task):
+        if callable(self.task_due_cb):
+            self.task_due_cb(task.get("id"), 0)
+        win.close()
+
+    def _due_date_confirm(self, win, task):
+        cal = None
+        for child in win.get_child().get_children():
+            if isinstance(child, Gtk.Calendar):
+                cal = child
+                break
+        if cal:
+            year, month, day = cal.get_date()
+            import datetime
+            dt = datetime.datetime(year, month + 1, day, 23, 59, 59)  # Fim do dia
+            due_ms = int(dt.timestamp() * 1000)
+            if callable(self.task_due_cb):
+                self.task_due_cb(task.get("id"), due_ms)
+        win.close()
+
     def _atualizar_seg(self, vista):
-        # contagem e botoes de NOTAS somem na vista de tarefas
+        # contagem e botoes de NOTAS somem na vista de tarefas/finance
         if self.lbl_count is not None:
             self.lbl_count.set_visible(vista == "notas")
         for attr in ("btn_add_nota", "btn_sync_notas"):
             botao = getattr(self, attr, None)
             if botao is not None:
                 botao.set_visible(vista == "notas")
-        for botao, nome in ((self.seg_notas, "notas"), (self.seg_tarefas, "tarefas")):
+        for botao, nome in ((self.seg_notas, "notas"), (self.seg_tarefas, "tarefas"), (self.seg_finance, "finance")):
             if botao is None:
                 continue
             botao.remove_css_class("pad-seg-on")
@@ -870,6 +1843,8 @@ class SpookPadManager:
         self._atualizar_seg(vista)
         if vista == "tarefas":
             self.pedir_tarefas()
+        elif vista == "finance":
+            self.pedir_finance()
 
     def pedir_tarefas(self):
         if callable(self.task_listar_cb):
@@ -880,6 +1855,123 @@ class SpookPadManager:
     def aplicar_tarefas(self, tasks):
         self.tasks = [dict(t) for t in (tasks or []) if isinstance(t, dict) and t.get("id")]
         GLib.idle_add(lambda: (self._render_tarefas(), False)[1])
+
+    def pedir_finance(self):
+        if callable(self.finance_listar_cb):
+            self.finance_listar_cb()
+        else:
+            self.aplicar_finance([])
+
+    def aplicar_finance(self, expenses):
+        self.expenses = [dict(e) for e in (expenses or []) if isinstance(e, dict) and e.get("id")]
+        GLib.idle_add(lambda: (self._render_finance(), False)[1])
+
+    def _render_finance(self):
+        # Atualiza contador
+        if self.lbl_finance is not None:
+            total = len(self.expenses)
+            total_parcelas = sum(len(e.get("parcelas", [])) for e in self.expenses)
+            self.lbl_finance.set_text(f"{total_parcelas} INSTALLMENTS · {total} EXPENSE{'S' if total != 1 else ''}")
+
+        # Se está na vista de calendário, re-renderiza
+        if self.finance_stack and self.finance_stack.get_visible_child_name() == "calendario":
+            self._render_finance_calendario()
+
+        # Renderiza lista de despesas
+        if self.finance_box is None:
+            return
+        while (c := self.finance_box.get_first_child()):
+            self.finance_box.remove(c)
+
+        if not self.expenses:
+            vazio = Gtk.Label(
+                label="NO EXPENSES YET\n\ncreate on phone, they sync here.",
+                justify=Gtk.Justification.CENTER,
+            )
+            vazio.add_css_class("pad-task-vazio")
+            vazio.set_vexpand(True)
+            self.finance_box.append(vazio)
+            return
+
+        for exp in self.expenses:
+            if exp.get("removido"):
+                continue
+            self.finance_box.append(self._card_expense(exp))
+
+    def _card_expense(self, exp):
+        """Card de despesa para a lista."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        card.add_css_class("pad-task")
+
+        # Header com título e valor total
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        titulo = Gtk.Label(label=exp.get("title") or exp.get("titulo") or "Despesa", xalign=0)
+        titulo.add_css_class("pad-task-tit")
+        titulo.set_hexpand(True)
+        header.append(titulo)
+
+        # Valor total
+        total = sum(p.get("valor", 0) for p in exp.get("parcelas", []))
+        total_lbl = Gtk.Label(label=f'R$ {total:,.2f}'.replace(",", "X").replace(".", ",").replace("X", "."), xalign=1)
+        total_lbl.add_css_class("pad-task-meta")
+        total_lbl.add_css_class("spook-warn")
+        header.append(total_lbl)
+        card.append(header)
+
+        # Parcelas
+        for i, p in enumerate(exp.get("parcelas", [])):
+            parcela_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            parcela_box.add_css_class("pad-meta")
+
+            # Número da parcela
+            num_lbl = Gtk.Label(label=f"{i+1}/{len(exp.get('parcelas', []))}", xalign=0)
+            num_lbl.add_css_class("pad-meta")
+            parcela_box.append(num_lbl)
+
+            # Valor
+            val_lbl = Gtk.Label(label=f'R$ {p.get("valor", 0):,.2f}'.replace(",", "X").replace(".", ",").replace("X", "."), xalign=0)
+            val_lbl.add_css_class("pad-task-meta")
+            parcela_box.append(val_lbl)
+
+            # Data
+            due = p.get("dueDate") or p.get("due_date")
+            if due:
+                from datetime import datetime as dt
+                due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m")
+                atrasada = due < int(time.time() * 1000) and not p.get("paga")
+                due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+                due_lbl.add_css_class("pad-task-meta")
+                if atrasada:
+                    due_lbl.add_css_class("spook-err")
+                elif p.get("paga"):
+                    due_lbl.add_css_class("pad-chip-ok")
+                else:
+                    due_lbl.add_css_class("spook-warn")
+                parcela_box.append(due_lbl)
+
+            # Checkbox paga
+            chk = Gtk.CheckButton()
+            chk.set_active(p.get("paga", False))
+            chk.set_valign(Gtk.Align.CENTER)
+            chk.connect("toggled", lambda b, eid=exp["id"], pi=i: self._toggle_parcela(eid, pi, b.get_active()))
+            parcela_box.append(chk)
+
+            card.append(parcela_box)
+
+        # Meta info
+        meta = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        origem = str(exp.get("origem") or "?").lower()
+        chip = Gtk.Label(label="POCO" if origem == "android" else ("ARCH" if origem == "arch" else origem.upper() or "?"))
+        chip.add_css_class("pad-task-chip")
+        chip.add_css_class("pad-task-chip-poco" if origem == "android" else "pad-task-chip-arch")
+        meta.append(chip)
+
+        quando = Gtk.Label(label=carimbo(_int(exp.get("em"))), xalign=0)
+        quando.add_css_class("pad-task-meta")
+        meta.append(quando)
+        card.append(meta)
+
+        return card
 
     def _adicionar_tarefa(self):
         if self.task_entry is None:
@@ -927,6 +2019,7 @@ class SpookPadManager:
     def _card_tarefa(self, t):
         feito = bool(t.get("feito"))
         origem = str(t.get("criado_por") or "?").lower()
+        due = t.get("due_date") or t.get("dueDate")
 
         card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         card.add_css_class("pad-task")
@@ -961,8 +2054,32 @@ class SpookPadManager:
         quando = Gtk.Label(label=carimbo(_int(t.get("ts"))), xalign=0)
         quando.add_css_class("pad-task-meta")
         meta.append(quando)
+
+        if due:
+            from datetime import datetime as dt
+            try:
+                due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m")
+                atrasada = due < int(time.time() * 1000)
+                due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+                due_lbl.add_css_class("pad-task-meta")
+                if atrasada:
+                    due_lbl.add_css_class("spook-err")
+                else:
+                    due_lbl.add_css_class("spook-warn")
+                meta.append(due_lbl)
+            except Exception:
+                pass
+
         conteudo.append(meta)
         card.append(conteudo)
+
+        # Botão para definir/editar vencimento
+        cal_btn = Gtk.Button(label="📅")
+        cal_btn.add_css_class("spook-btn")
+        cal_btn.add_css_class("spook-msi-btn")
+        cal_btn.set_tooltip_text("Set due date")
+        cal_btn.connect("clicked", lambda *_: self._abrir_due_date_dialog(t))
+        card.append(cal_btn)
 
         del_btn = Gtk.Button(label="DEL")
         del_btn.add_css_class("spook-btn")
