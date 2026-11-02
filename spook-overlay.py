@@ -2081,8 +2081,17 @@ class SpookOverlay(Gtk.Application):
                     self.ai_session_id = data["sessao_id"]
                 sio.disconnect()
 
-            sio.connect(AI_URL, wait_timeout=10)
-            envio = {"pergunta": pergunta}
+            # o /ia do relay exige o mesmo token do app (tool_call roda comando
+            # na maquina); sem auth a conexao e recusada.
+            token = None
+            try:
+                arquivo_token = Path.home() / ".pentestlink" / "token_sessao.txt"
+                if arquivo_token.exists():
+                    token = arquivo_token.read_text().strip() or None
+            except Exception:
+                token = None
+            sio.connect(AI_URL, auth={"token": token} if token else None, wait_timeout=10)
+            envio = {"pergunta": pergunta, "usuario": "taylor"}
             if self.ai_session_id:
                 envio["sessao_id"] = self.ai_session_id
             sio.emit("chat_ia_perguntar", envio, namespace="/ia")
