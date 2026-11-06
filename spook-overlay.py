@@ -43,6 +43,100 @@ ICON = ICON_ROUND if ICON_ROUND.exists() else Path.home() / ".local/share/icons/
 AI_URL = "http://100.70.88.101:5000/ia"
 
 CSS = """
+
+/* ============================ FINANCE UI ============================ */
+.finance-title { font-size: 22px; font-weight: 700; color: #FF4D9A; letter-spacing: -0.5px; }
+.finance-subtitle { font-size: 11px; color: #8A8F98; font-weight: 500; }
+.finance-month-label { font-size: 14px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-nav-btn { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 50%; min-width: 32px; min-height: 32px; font-size: 14px; }
+.finance-nav-btn:hover { background: #2A2736; border-color: #FF4D9A; }
+.finance-action-btn { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 50%; min-width: 36px; min-height: 36px; font-size: 16px; }
+.finance-action-btn:hover { background: #2A2736; border-color: #FF4D9A; }
+.finance-fab { background: #FF4D9A; color: #0B0A12; border: none; border-radius: 50%; min-width: 56px; min-height: 56px; font-size: 28px; font-weight: 700; box-shadow: 0 4px 16px rgba(255, 77, 154, 0.4); }
+.finance-fab:hover { background: #FF6BA8; box-shadow: 0 6px 24px rgba(255, 77, 154, 0.6); }
+.finance-scroll { background: transparent; }
+.finance-vazio { background: #16141F; border: 1px solid #3A3648; border-radius: 16px; padding: 32px; }
+.finance-vazio-icon { font-size: 48px; color: #8A8F98; }
+.finance-vazio-title { font-size: 16px; font-weight: 600; color: #F4F1FF; }
+.finance-vazio-sub { font-size: 12px; color: #8A8F98; }
+.finance-section-title { font-size: 11px; font-weight: 700; color: #8A8F98; letter-spacing: 0.5px; margin-top: 8px; margin-bottom: 4px; }
+.finance-card { background: #16141F; border: 1px solid #3A3648; border-radius: 16px; padding: 16px; }
+.finance-card-title { font-size: 11px; font-weight: 700; color: #5CE1E6; letter-spacing: 0.5px; margin-bottom: 8px; }
+.finance-card-mes { background: #16141F; border: 1px solid #3A3648; border-radius: 16px; padding: 16px; }
+.finance-nav-btn-sm { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 50%; min-width: 28px; min-height: 28px; font-size: 12px; }
+.finance-nav-btn-sm:hover { background: #2A2736; border-color: #FF4D9A; }
+.finance-card-mes-title { font-size: 13px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-total-label { font-size: 10px; font-weight: 700; color: #8A8F98; letter-spacing: 0.5px; }
+.finance-total-value { font-size: 24px; font-weight: 700; font-family: "JetBrains Mono", monospace; }
+.finance-green { color: #5CE1E6; }
+.finance-amber { color: #FFC400; }
+.finance-divider { background: #3A3648; min-width: 1px; margin: 0 16px; }
+.finance-bar { border-radius: 4px 4px 0 0; min-width: 16px; }
+.finance-cat-0 { background: #FF4D9A; }
+.finance-cat-1 { background: #5CE1E6; }
+.finance-cat-2 { background: #FFC400; }
+.finance-cat-3 { background: #FF7A45; }
+.finance-cat-4 { background: #B44AFF; }
+.finance-cat-5 { background: #9CFF57; }
+.finance-bar-label { font-size: 9px; font-weight: 600; color: #8A8F98; margin-top: 4px; }
+.finance-bar-value { font-size: 9px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-parcela-card { background: #16141F; border: 1px solid #3A3648; border-radius: 12px; padding: 12px 16px; transition: all 140ms ease; }
+.finance-parcela-card:hover { background: #1E1C2A; border-color: #6E6A81; }
+.finance-parcela-overdue { border-color: #FF5C6C; background: rgba(255, 92, 108, 0.08); }
+.finance-parcela-paid { opacity: 0.7; }
+.finance-parcela-title { font-size: 13px; font-weight: 600; color: #F4F1FF; }
+.finance-parcela-due { font-size: 11px; color: #8A8F98; }
+.finance-overdue { color: #FF5C6C; font-weight: 600; }
+.finance-paid { color: #5CE1E6; }
+.finance-parcela-valor { font-size: 14px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-check-paid { font-size: 16px; color: #5CE1E6; }
+.finance-expense-card { background: #16141F; border: 1px solid #3A3648; border-radius: 12px; padding: 12px 16px; transition: all 140ms ease; }
+.finance-expense-card:hover { background: #1E1C2A; border-color: #6E6A81; }
+.finance-expense-title { font-size: 14px; font-weight: 600; color: #F4F1FF; }
+.finance-expense-meta { font-size: 11px; color: #8A8F98; }
+.finance-expense-inst { font-size: 11px; color: #5CE1E6; font-weight: 600; font-family: "JetBrains Mono", monospace; }
+.finance-expense-total { font-size: 16px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-sync-pending { font-size: 10px; color: #FFC400; font-weight: 600; }
+.finance-btn-delete { background: transparent; color: #FF5C6C; border: 1px solid #FF5C6C; border-radius: 8px; min-width: 32px; min-height: 32px; font-size: 14px; }
+.finance-btn-delete:hover { background: rgba(255, 92, 108, 0.15); }
+.finance-sync-status { font-size: 11px; color: #8A8F98; margin-top: 16px; padding: 8px; background: #1E1C2A; border-radius: 8px; }
+.finance-toggle-btn { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 50%; min-width: 28px; min-height: 28px; font-size: 14px; }
+.finance-toggle-btn:hover { background: #2A2736; border-color: #5CE1E6; }
+.finance-toggle-on { background: #5CE1E6; color: #0B0A12; border-color: #5CE1E6; }
+.finance-cal-nav { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 8px; min-width: 36px; min-height: 32px; font-size: 12px; font-weight: 600; }
+.finance-cal-nav:hover { background: #2A2736; border-color: #FF4D9A; }
+.finance-cal-title { font-size: 14px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-cal-weekday { font-size: 10px; font-weight: 700; color: #8A8F98; }
+.finance-cal-cell { background: #16141F; border: 1px solid #2A2736; border-radius: 8px; }
+.finance-cal-cell-today { background: rgba(255, 77, 154, 0.15); border-color: #FF4D9A; }
+.finance-cal-cell-overdue { background: rgba(255, 92, 108, 0.12); border-color: #FF5C6C; }
+.finance-cal-cell-due { background: rgba(255, 196, 0, 0.1); border-color: #FFC400; }
+.finance-cal-day { font-size: 14px; font-weight: 600; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-cal-day-today { color: #FF4D9A; }
+.finance-cal-dots { padding: 2px 0; }
+.finance-cal-dot-pending { background: #FFC400; border-radius: 50%; min-width: 6px; min-height: 6px; }
+.finance-cal-dot-overdue { background: #FF5C6C; border-radius: 50%; min-width: 6px; min-height: 6px; }
+.finance-cal-dot-paid { background: #5CE1E6; border-radius: 50%; min-width: 6px; min-height: 6px; }
+.finance-cal-plus { font-size: 8px; color: #8A8F98; }
+.finance-form-dialog { background: #0B0A12; }
+.finance-form-scroll { background: transparent; }
+.finance-form-label { font-size: 11px; font-weight: 700; color: #8A8F98; letter-spacing: 0.5px; margin-bottom: 4px; }
+.finance-form-entry { background: #16141F; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.finance-form-entry:focus { border-color: #FF4D9A; box-shadow: 0 0 0 3px rgba(255, 77, 154, 0.15); }
+.finance-form-combo { background: #16141F; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.finance-form-sep { background: #3A3648; margin: 8px 0; }
+.finance-form-section { font-size: 11px; font-weight: 700; color: #5CE1E6; letter-spacing: 0.5px; margin-top: 8px; }
+.finance-form-date-btn { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 10px; padding: 10px 14px; font-size: 13px; }
+.finance-form-date-btn:hover { background: #2A2736; border-color: #FF4D9A; }
+.finance-preview-box { background: #1E1C2A; border: 1px solid #3A3648; border-radius: 12px; padding: 12px; margin-top: 8px; }
+.finance-preview-title { font-size: 10px; font-weight: 700; color: #8A8F98; letter-spacing: 0.5px; margin-bottom: 8px; }
+.finance-preview-item { font-size: 12px; color: #F4F1FF; font-family: "JetBrains Mono", monospace; }
+.finance-btn-save { background: #FF4D9A; color: #0B0A12; border: none; border-radius: 10px; padding: 10px 24px; font-size: 13px; font-weight: 700; }
+.finance-btn-save:hover { background: #FF6BA8; }
+.finance-btn-cancel { background: #1E1C2A; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 10px; padding: 10px 24px; font-size: 13px; font-weight: 600; }
+.finance-btn-cancel:hover { background: #2A2736; border-color: #6E6A81; }
+.finance-btn-delete { background: transparent; color: #FF5C6C; border: 1px solid #FF5C6C; border-radius: 10px; padding: 10px 24px; font-size: 13px; font-weight: 600; }
+.finance-btn-delete:hover { background: rgba(255, 92, 108, 0.15); }
 window.spook {
   background: #0B0A12; color: #F4F1FF;
   font-family: "Roboto", "Noto Sans", sans-serif;
@@ -63,18 +157,44 @@ window.spook {
   background: #16141F; border-radius: 18px; border: 1px solid #3A3648;
   padding: 16px 18px;
 }
+.spook-section-title { font-size: 20px; font-weight: 700; color: #F4F1FF; }
+.spook-livros-sec {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 10px; font-weight: 700; color: #8A8F98;
+  margin-top: 4px;
+}
 .spook-card-title { font-size: 12px; font-weight: 700; color: #5CE1E6; }
 .spook-metric {
   font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
   font-size: 12px; font-weight: 500; color: #F4F1FF;
 }
+.spook-metric-title { font-size: 11px; color: #B8B4C8; }
+.spook-metric-value {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 11px; color: #8A8F98;
+}
+progressbar.spook-prog {
+  background: transparent; background-image: none; box-shadow: none;
+  min-height: 6px; min-width: 60px; padding: 0; border: none;
+}
+progressbar.spook-prog > trough {
+  background: #2A2736; border-radius: 999px; min-height: 6px; border: none;
+}
+progressbar.spook-prog > trough > progress {
+  background: #5CE1E6; border-radius: 999px; min-height: 6px; border: none;
+}
+progressbar.spook-prog-ok > trough > progress { background: #5CE1E6; }
+progressbar.spook-prog-warn > trough > progress { background: #FF7A45; }
+progressbar.spook-prog-err > trough > progress { background: #FF5C6C; }
+progressbar.spook-prog-pink > trough > progress { background: #FF4D9A; }
 .spook-note { font-size: 11px; color: #B8B4C8; }
 .spook-loc { font-size: 13px; color: #F4F1FF; }
 .spook-ok { color: #5CE1E6; }
 .spook-warn { color: #FF7A45; }
 .spook-err { color: #FF5C6C; }
-.spook-card-android { border: 1px solid rgba(255, 77, 154, 0.35); }
-.spook-card-arch { border: 1px solid rgba(92, 225, 230, 0.32); }
+/* BorderStroke 2.dp do Card do app Android */
+.spook-card-android { border: 2px solid #FF4D9A; }
+.spook-card-arch { border: 2px solid #5CE1E6; }
 
 .spook-msi {
   font-family: "Material Symbols Rounded";
@@ -779,45 +899,94 @@ class SpookOverlay(Gtk.Application):
         "robot": "robot",      # IA = robozinho
     }
 
+    def _linha_metrica(self, prefixo, chave, nome, lbl_valor):
+        """Uma linha de metrica no estilo do GridMetricas do app Android:
+        icone + (titulo / valor) + LinearProgressIndicator de 60dp."""
+        if not hasattr(self, "_progs"):
+            self._progs = {}
+        linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        linha.set_margin_top(2)
+        linha.set_margin_bottom(2)
+        ic = self._icone_metric(chave)
+        ic.set_valign(Gtk.Align.CENTER)
+        linha.append(ic)
+
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        col.set_hexpand(True)
+        col.set_valign(Gtk.Align.CENTER)
+        tit = Gtk.Label(label=nome, xalign=0)
+        tit.add_css_class("spook-metric-title")
+        col.append(tit)
+        lbl_valor.add_css_class("spook-metric-value")
+        col.append(lbl_valor)
+        linha.append(col)
+
+        prog = Gtk.ProgressBar()
+        prog.add_css_class("spook-prog")
+        prog.set_size_request(60, -1)
+        prog.set_valign(Gtk.Align.CENTER)
+        prog.set_fraction(0.0)
+        linha.append(prog)
+        self._progs[f"{prefixo}-{chave}"] = prog
+        return linha
+
+    def _set_prog(self, chave, frac, classe=""):
+        prog = getattr(self, "_progs", {}).get(chave)
+        if prog is None:
+            return
+        try:
+            valor = max(0.0, min(1.0, float(frac or 0.0)))
+        except (TypeError, ValueError):
+            valor = 0.0
+        prog.set_fraction(valor)
+        for css in ("spook-prog-ok", "spook-prog-warn", "spook-prog-err", "spook-prog-pink"):
+            prog.remove_css_class(css)
+        if classe:
+            prog.add_css_class(classe)
+
     def _rich_card(self, titulo, status_label, linhas, acento_css=""):
-        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        prefixo = titulo.lower()
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         caixa.add_css_class("spook-rich-card")
         if acento_css:
             caixa.add_css_class(acento_css)
+
+        hdr = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         rotulo = Gtk.Label(label=titulo, xalign=0)
         rotulo.add_css_class("spook-card-title")
-        caixa.append(rotulo)
-        caixa.append(status_label)
-        for chave, texto_widget in linhas:
-            item = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-            ic = self._icone_metric(chave)
+        rotulo.set_hexpand(True)
+        hdr.append(rotulo)
+        status_label.add_css_class("spook-status")
+        hdr.append(status_label)
+        caixa.append(hdr)
+
+        grade = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for chave, nome, texto_widget in linhas:
             if isinstance(texto_widget, str):
                 tx = Gtk.Label(label=texto_widget, xalign=0)
-                tx.add_css_class("spook-metric")
-                tx.set_hexpand(True)
-                item.append(ic)
-                item.append(tx)
+                grade.append(self._linha_metrica(prefixo, chave, nome, tx))
             else:
-                item.append(ic)
-                texto_widget.add_css_class("spook-metric")
-                item.append(texto_widget)
-            item.set_hexpand(True)
-            caixa.append(item)
+                grade.append(self._linha_metrica(prefixo, chave, nome, texto_widget))
+        caixa.append(grade)
         return caixa
 
     def _pagina_home(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        titulo = Gtk.Label(label="SYSTEM STATUS", xalign=0)
+        titulo.add_css_class("spook-section-title")
+        box.append(titulo)
+
         colunas = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         android_card = self._rich_card(
             "ANDROID",
             self.android_online_label,
             [
-                ("bat", self.android_bat_label),
-                ("ram", self.android_ram_label),
-                ("disk", self.android_disk_label),
-                ("cpu", self.android_cpu_label),
-                ("temp", self.android_temp_label),
-                ("load", self.android_load_label),
+                ("bat", "Battery", self.android_bat_label),
+                ("ram", "RAM", self.android_ram_label),
+                ("disk", "Disk", self.android_disk_label),
+                ("cpu", "CPU", self.android_cpu_label),
+                ("temp", "CPU Temp", self.android_temp_label),
+                ("load", "Load", self.android_load_label),
             ],
             acento_css="spook-card-android",
         )
@@ -826,12 +995,12 @@ class SpookOverlay(Gtk.Application):
             "ARCH",
             self.arch_status_label,
             [
-                ("bat", self.arch_bat_label),
-                ("ram", self.arch_ram_label),
-                ("disk", self.arch_disk_label),
-                ("cpu", self.arch_cpu_label),
-                ("temp", self.arch_temp_label),
-                ("load", self.arch_load_label),
+                ("bat", "Battery", self.arch_bat_label),
+                ("ram", "RAM", self.arch_ram_label),
+                ("disk", "Disk", self.arch_disk_label),
+                ("cpu", "CPU", self.arch_cpu_label),
+                ("temp", "CPU Temp", self.arch_temp_label),
+                ("load", "Load", self.arch_load_label),
             ],
             acento_css="spook-card-arch",
         )
@@ -844,8 +1013,8 @@ class SpookOverlay(Gtk.Application):
         return self._scroll(box)
 
     def _card_oracle_relay(self):
-        """Card de status do Oracle Relay (sempre online)."""
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        """Card de status do Spook Server (Oracle Relay), igual ao card do app."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.add_css_class("spook-card")
         card.add_css_class("spook-card-arch")
 
@@ -853,39 +1022,32 @@ class SpookOverlay(Gtk.Application):
         ic = self._icone_metric("hub")
         ic.add_css_class("spook-msi-arch")
         hdr.append(ic)
-        titulo = Gtk.Label(label="ORACLE RELAY", xalign=0)
+        titulo = Gtk.Label(label="SPOOK SERVER", xalign=0)
         titulo.add_css_class("spook-card-title")
         titulo.add_css_class("spook-msg-h-arch")
+        titulo.set_hexpand(True)
         hdr.append(titulo)
         card.append(hdr)
 
-        self.relay_hub_label = Gtk.Label(label="Oracle VM (100.70.88.101:5000)", xalign=0)
+        self.relay_hub_label = Gtk.Label(label="Oracle (100.70.88.101:5000)", xalign=0)
         self.relay_status_label = Gtk.Label(label="Checking...", xalign=0)
         self.relay_reports_label = Gtk.Label(label="—", xalign=0)
         self.relay_media_label = Gtk.Label(label="—", xalign=0)
 
-        linhas = [
-            ("hub", "Relay", self.relay_hub_label),
+        grade = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        for chave, nome, lbl_valor in (
+            ("server", "Server", self.relay_hub_label),
             ("status", "Status", self.relay_status_label),
             ("report", "Reports", self.relay_reports_label),
             ("media", "Media", self.relay_media_label),
-        ]
-        grade = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        grade.set_margin_top(8)
-        for chave, nome, lbl_valor in linhas:
-            linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-            ic = self._icone_metric(chave)
-            linha.append(ic)
-            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
-            nm = Gtk.Label(label=nome, xalign=0)
-            nm.add_css_class("spook-note")
-            lbl_valor.add_css_class("spook-loc")
-            col.append(nm)
-            col.append(lbl_valor)
-            linha.append(col)
-            grade.append(linha)
-
+        ):
+            grade.append(self._linha_metrica("server", chave, nome, lbl_valor))
         card.append(grade)
+        self._set_prog("server-server", 1.0, "spook-prog-ok")
+        self._set_prog("server-status", 0.0, "spook-prog-err")
+        self._set_prog("server-report", 0.0, "spook-prog-warn")
+        self._set_prog("server-media", 0.0, "spook-prog-ok")
+
         self._bg(self._atualizar_oracle_relay)
         GLib.timeout_add_seconds(30, self._refrescar_status_relay)
         return card
@@ -928,9 +1090,11 @@ class SpookOverlay(Gtk.Application):
                 if android_online:
                     texto += " · Android"
                 GLib.idle_add(lambda t=texto: self.relay_status_label.set_text(t))
+                GLib.idle_add(lambda: self._set_prog("server-status", 1.0, "spook-prog-ok"))
                 GLib.idle_add(lambda: self._atualizar_status(android_online))
             except Exception:
                 GLib.idle_add(lambda: self.relay_status_label.set_text("Offline"))
+                GLib.idle_add(lambda: self._set_prog("server-status", 0.0, "spook-prog-err"))
         self._bg(_fazer)
         return True
 
@@ -956,8 +1120,11 @@ class SpookOverlay(Gtk.Application):
                         data = json.loads(r.read().decode())
                         qtd = len(data.get("relatorios", []))
                         GLib.idle_add(lambda: self.relay_reports_label.set_text(f"{qtd} files"))
+                        GLib.idle_add(lambda q=qtd: self._set_prog(
+                            "server-report", 0.5 if q > 0 else 0.0, "spook-prog-warn"))
             except Exception:
                 GLib.idle_add(lambda: self.relay_reports_label.set_text("—"))
+                GLib.idle_add(lambda: self._set_prog("server-report", 0.0, "spook-prog-warn"))
 
             try:
                 tok = None
@@ -976,8 +1143,11 @@ class SpookOverlay(Gtk.Application):
                         data = json.loads(r.read().decode())
                         qtd = len(data.get("items", []))
                         GLib.idle_add(lambda: self.relay_media_label.set_text(f"{qtd} files"))
+                        GLib.idle_add(lambda q=qtd: self._set_prog(
+                            "server-media", 0.25 if q > 0 else 0.0, "spook-prog-ok"))
             except Exception:
                 GLib.idle_add(lambda: self.relay_media_label.set_text("—"))
+                GLib.idle_add(lambda: self._set_prog("server-media", 0.0, "spook-prog-ok"))
         self._bg(_fazer)
 
     # ── SCANS ──
@@ -1203,12 +1373,18 @@ class SpookOverlay(Gtk.Application):
         return vbox
 
     def _hub_chat_page(self):
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         hdr = Gtk.Box(spacing=8)
-        titulo = Gtk.Label(label="Arch ↔ Phone", xalign=0)
-        titulo.add_css_class("spook-card-title")
-        titulo.set_hexpand(True)
-        hdr.append(titulo)
+        hdr.set_margin_top(4)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        col.set_hexpand(True)
+        titulo = Gtk.Label(label="CHAT", xalign=0)
+        titulo.add_css_class("spook-section-title")
+        col.append(titulo)
+        sub = Gtk.Label(label="Arch + Poco", xalign=0)
+        sub.add_css_class("spook-note")
+        col.append(sub)
+        hdr.append(col)
         hdr.append(self.chat_status_label)
         box.append(hdr)
         chat_scroll = Gtk.ScrolledWindow()
@@ -2262,11 +2438,34 @@ class SpookOverlay(Gtk.Application):
         self.arch_status_label.add_css_class("spook-metric")
         self.arch_status_label.add_css_class(bat_color)
         self.arch_bat_label.set_text(f"{bat}% {str(bat_status).upper()}")
-        self.arch_ram_label.set_text(f"RAM {ram_pct}% ({ram_used}/{ram_total} MB)")
-        self.arch_disk_label.set_text(f"DISK {disk_pct}% ({disk_used}/{disk_total} GB)")
-        self.arch_cpu_label.set_text(f"CPU {cpu_pct}%")
-        self.arch_temp_label.set_text(f"TEMP {cpu_temp}°C")
-        self.arch_load_label.set_text(f"LOAD {load}")
+        self.arch_ram_label.set_text(f"{ram_pct}% ({ram_used}/{ram_total} MB)")
+        self.arch_disk_label.set_text(f"{disk_pct}% ({disk_used}/{disk_total} GB)")
+        self.arch_cpu_label.set_text(f"{cpu_pct}%")
+        self.arch_temp_label.set_text(f"{cpu_temp}°C")
+        self.arch_load_label.set_text(str(load))
+
+        # Barras de progresso (LinearProgressIndicator do app Android)
+        try:
+            bat_pct = float(bat)
+        except (TypeError, ValueError):
+            bat_pct = -1.0
+        self._set_prog("arch-bat", max(bat_pct, 0) / 100,
+                       "spook-prog-ok" if bat_pct >= 20 else "spook-prog-warn")
+        self._set_prog("arch-ram", float(ram_pct or 0) / 100, "spook-prog-ok")
+        self._set_prog("arch-disk", float(disk_pct or 0) / 100, "spook-prog-ok")
+        self._set_prog("arch-cpu", float(cpu_pct or 0) / 100,
+                       "spook-prog-warn" if float(cpu_pct or 0) > 80 else "spook-prog-ok")
+        try:
+            temp_n = float(cpu_temp or 0)
+        except (TypeError, ValueError):
+            temp_n = 0.0
+        self._set_prog("arch-temp", temp_n / 100,
+                       "spook-prog-err" if temp_n > 75 else
+                       "spook-prog-warn" if temp_n > 60 else "spook-prog-ok")
+        try:
+            self._set_prog("arch-load", float(load or 0) / 8, "spook-prog-ok")
+        except (TypeError, ValueError):
+            self._set_prog("arch-load", 0.0, "spook-prog-ok")
         self.arch_metrics_label.set_text(
             f"RAM {ram_pct}% ({ram_used}/{ram_total} MB)  DISK {disk_pct}% ({disk_used}/{disk_total} GB)\n"
             f"LOAD {load}  CPU TEMP {cpu_temp}°C"
@@ -2293,19 +2492,45 @@ class SpookOverlay(Gtk.Application):
             return "--" if x is None else x
 
         self.android_bat_label.set_text(
-            f"{bat_cel}% {estado}" if bat_cel is not None else "BATTERY --"
+            f"{bat_cel}% {estado}" if bat_cel is not None else "—"
         )
         self.android_ram_label.set_text(
-            f"RAM {_v(cel.get('ram_pct'))}% "
+            f"{_v(cel.get('ram_pct'))}% "
             f"({_v(cel.get('ram_usado_mb'))}/{_v(cel.get('ram_total_mb'))} MB)"
         )
         self.android_disk_label.set_text(
-            f"DISK {_v(cel.get('disco_pct'))}% "
+            f"{_v(cel.get('disco_pct'))}% "
             f"({_v(cel.get('disco_usado_gb'))}/{_v(cel.get('disco_total_gb'))} GB)"
         )
-        self.android_cpu_label.set_text(f"CPU {_v(cel.get('cpu_pct'))}%")
-        self.android_temp_label.set_text(f"TEMP {_v(cel.get('temp_c'))}°C")
-        self.android_load_label.set_text(f"LOAD {_v(cel.get('load1'))}")
+        self.android_cpu_label.set_text(f"{_v(cel.get('cpu_pct'))}%")
+        self.android_temp_label.set_text(f"{_v(cel.get('temp_c'))}°C")
+        self.android_load_label.set_text(f"{_v(cel.get('load1'))}")
+
+        # Barras de progresso do card ANDROID
+        for chave, valor, aviso in (
+            ("bat", bat_cel, 20),
+            ("ram", cel.get("ram_pct"), None),
+            ("disk", cel.get("disco_pct"), None),
+            ("cpu", cel.get("cpu_pct"), 80),
+            ("temp", cel.get("temp_c"), 60),
+            ("load", cel.get("load1"), None),
+        ):
+            try:
+                num = float(valor)
+            except (TypeError, ValueError):
+                self._set_prog(f"android-{chave}", 0.0, "spook-prog-ok")
+                continue
+            classe = "spook-prog-ok"
+            if aviso == 20 and num < 20:
+                classe = "spook-prog-warn"
+            elif aviso == 80 and num > 80:
+                classe = "spook-prog-warn"
+            elif aviso == 60 and num > 75:
+                classe = "spook-prog-err"
+            elif aviso == 60 and num > 60:
+                classe = "spook-prog-warn"
+            escala = 100.0 if chave != "load" else 8.0
+            self._set_prog(f"android-{chave}", num / escala, classe)
         self._atualizar_status(online)
 
         enviando = getattr(self, "_enviando_arquivo", False)

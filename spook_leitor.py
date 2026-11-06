@@ -572,8 +572,9 @@ class SpookLeitorManager:
         tit_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         tit = Gtk.Label(label="SPOOK // READER", xalign=0)
         tit.add_css_class("spook-title")
-        sub = Gtk.Label(label="CROSS-DEVICE READING POSITION SYNC", xalign=0)
-        sub.add_css_class("spook-sub")
+        sub = Gtk.Label(label="ORACLE RELAY · CROSS-DEVICE", xalign=0)
+        sub.add_css_class("spook-status")
+        sub.add_css_class("spook-ok")
         tit_box.append(tit)
         tit_box.append(sub)
         cabeca.append(tit_box)
@@ -600,6 +601,10 @@ class SpookLeitorManager:
 
         raiz.append(cabeca)
 
+        self.lbl_livros = Gtk.Label(label="YOUR BOOKS (0)", xalign=0)
+        self.lbl_livros.add_css_class("spook-livros-sec")
+        raiz.append(self.lbl_livros)
+
         # Library List (ScrolledWindow)
         scroll_livros = Gtk.ScrolledWindow()
         scroll_livros.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -620,6 +625,8 @@ class SpookLeitorManager:
             self.lista_livros_box.remove(c)
 
         visiveis = [l for l in self.livros_lista if not l.get("removido")]
+        if getattr(self, "lbl_livros", None) is not None:
+            self.lbl_livros.set_text(f"YOUR BOOKS ({len(visiveis)})")
         if not visiveis:
             caixa_vazia = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             caixa_vazia.add_css_class("spook-card")
