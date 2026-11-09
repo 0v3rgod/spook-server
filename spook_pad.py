@@ -138,6 +138,19 @@ button.pad-seg-on:hover {
   background: rgba(255,77,154,0.20); color: #FF7AB0; border-color: #FF4D9A;
   box-shadow: none;
 }
+/* Ícones Material Symbols (os mesmos glifos do app Android) */
+.pad-ico-list, .pad-ico-cal {
+  font-family: "Material Symbols Rounded"; font-size: 15px; color: #8A8F98;
+}
+button.pad-seg-on .pad-ico-list, button.pad-seg-on .pad-ico-cal { color: #FF4D9A; }
+.fin-ico { font-family: "Material Symbols Rounded"; font-size: 17px; }
+.fin-ico-cal { color: #5CE1E6; }
+.fin-ico-list { color: #FFC400; }
+.fin-ico-sync { color: #5CE1E6; }
+.fin-ico-add { color: #0B0A12; font-size: 26px; }
+.fin-ico-check { font-family: "Material Symbols Rounded"; font-size: 18px; }
+.fin-ico-empty { font-family: "Material Symbols Rounded"; font-size: 44px; color: #8A8F98; }
+.fin-ico-del { font-family: "Material Symbols Rounded"; font-size: 16px; color: #FF5C6C; }
 .pad-task {
   background: #16141F; border-radius: 16px; border: 1px solid #3A3648;
   padding: 8px 12px; transition: all 140ms ease;
@@ -880,6 +893,118 @@ class SpookPadManager:
             self.marcar_enviada(nid, nota)
 
     # -------------------------------------------------------------- páginas
+    def _icone_msi(self, glifo, *classes):
+        """Label com um glifo Material Symbols Rounded (mesmo ícone do app Android)."""
+        lbl = Gtk.Label(label=glifo)
+        lbl.add_css_class("fin-ico")
+        for classe in classes:
+            lbl.add_css_class(classe)
+        return lbl
+
+    # =========================================================== IA TAB
+    def _criar_pagina_ia(self):
+        """IA chat page with shared memory via relay."""
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        caixa.add_css_class("spook-root")
+        caixa.set_margin_start(16)
+        caixa.set_margin_end(16)
+        caixa.set_margin_top(16)
+        caixa.set_margin_bottom(16)
+
+        # Header
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header.set_valign(Gtk.Align.CENTER)
+        titulo = Gtk.Label(label="SPOOK IA", xalign=0)
+        titulo.add_css_class("ia-title")
+        header.append(titulo)
+        caixa.append(header)
+
+        # Chat area
+        self.ia_scrolled = Gtk.ScrolledWindow()
+        self.ia_scrolled.set_vexpand(True)
+        self.ia_scrolled.set_hexpand(True)
+        self.ia_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        self.ia_chat_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.ia_chat_box.set_margin_top(8)
+        self.ia_chat_box.set_margin_bottom(8)
+        self.ia_scrolled.set_child(self.ia_chat_box)
+        caixa.append(self.ia_scrolled)
+
+        # Input area
+        input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.ia_entry = Gtk.Entry()
+        self.ia_entry.set_hexpand(True)
+        self.ia_entry.set_placeholder_text("Pergunte algo... (tasks, notas, finanças, scans, comandos)")
+        self.ia_entry.connect("activate", lambda *_: self._ia_enviar())
+        input_box.append(self.ia_entry)
+
+        self.ia_send_btn = Gtk.Button()
+        self.ia_send_btn.add_css_class("spook-btn")
+        self.ia_send_btn.add_css_class("spook-accent")
+        self.ia_send_btn.set_child(self._icone_msi("\ue145", "fin-ico-add"))
+        self.ia_send_btn.connect("clicked", lambda *_: self._ia_enviar())
+        input_box.append(self.ia_send_btn)
+
+        caixa.append(input_box)
+        return caixa
+
+    def _ia_enviar(self):
+        texto = (self.ia_entry.get_text() or "").strip()
+        if not texto:
+            return
+        self.ia_entry.set_text("")
+        # Adiciona mensagem do usuario
+        self._ia_adicionar_mensagem("usuario", texto)
+        # Envia via socket /ia namespace
+        if hasattr(self, "sio") and getattr(self.sio, "connected", False):
+            self.sio.emit("chat_ia_perguntar", {
+                "pergunta": texto,
+                "sessao_id": self._ia_sessao_id,
+                "usuario": "arch"
+            }, namespace="/ia")
+        else:
+            self._ia_adicionar_mensagem("ia", "⚠ Socket não conectado")
+
+    def _ia_adicionar_mensagem(self, origem, texto):
+        msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        if origem == "usuario":
+            msg_box.set_halign(Gtk.Align.END)
+            lbl = Gtk.Label(label=f"Você: {texto}", xalign=1, wrap=True)
+            lbl.add_css_class("ia-msg-user")
+        else:
+            msg_box.set_halign(Gtk.Align.START)
+            lbl = Gtk.Label(label=f"IA: {texto}", xalign=0, wrap=True)
+            lbl.add_css_class("ia-msg-ia")
+        lbl.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        lbl.set_max_width_chars(70)
+        msg_box.append(lbl)
+        self.ia_chat_box.append(msg_box)
+        # Auto-scroll
+        GLib.idle_add(lambda: self._ia_scroll_fim())
+
+    def _ia_scroll_fim(self):
+        adj = self.ia_scrolled.get_vadjustment()
+        if adj:
+            adj.set_value(adj.get_upper())
+
+    # =========================================================== IA HANDLERS
+    def _ia_on_resposta(self, dados):
+        """Handler para chat_ia_resposta no namespace /ia."""
+        ok = (dados or {}).get("ok", False)
+        resposta = (dados or {}).get("resposta", "")
+        motor = (dados or {}).get("motor", "")
+        if ok:
+            self._ia_adicionar_mensagem("ia", f"{resposta}  [{motor}]")
+        else:
+            self._ia_adicionar_mensagem("ia", f"⚠ {resposta}")
+
+    def _ia_on_tool_call(self, dados):
+        """Handler para tool_call - mostra que a IA está executando ação."""
+        acao = (dados or {}).get("acao", "")
+        params = (dados or {}).get("params", {})
+        self._ia_adicionar_mensagem("ia", f"⚙ Executando: {acao} ({params})")
+
     def _css(self):
         if self._css_instalado:
             return
@@ -1005,13 +1130,25 @@ class SpookPadManager:
         espaco.set_hexpand(True)
         topo.append(espaco)
 
-        # Toggle LISTA | CALENDÁRIO
-        self.seg_task_lista = Gtk.Button(label="LIST")
+        # Toggle LISTA | CALENDÁRIO (pills com ícone, igual ao app Android)
+        def _pill_seg(texto, glifo, classe_ico):
+            conteudo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+            conteudo.set_valign(Gtk.Align.CENTER)
+            ic = Gtk.Label(label=glifo)
+            ic.add_css_class(classe_ico)
+            ic.set_valign(Gtk.Align.CENTER)
+            conteudo.append(ic)
+            conteudo.append(Gtk.Label(label=texto))
+            btn = Gtk.Button()
+            btn.set_child(conteudo)
+            return btn
+
+        self.seg_task_lista = _pill_seg("LIST", "\ue896", "pad-ico-list")
         self.seg_task_lista.add_css_class("pad-seg-btn")
         self.seg_task_lista.connect("clicked", lambda *_: self._mostrar_task_vista("lista"))
         topo.append(self.seg_task_lista)
 
-        self.seg_task_cal = Gtk.Button(label="CALENDAR")
+        self.seg_task_cal = _pill_seg("CALENDAR", "\ue916", "pad-ico-cal")
         self.seg_task_cal.add_css_class("pad-seg-btn")
         self.seg_task_cal.connect("clicked", lambda *_: self._mostrar_task_vista("calendario"))
         topo.append(self.seg_task_cal)
@@ -1127,21 +1264,24 @@ class SpookPadManager:
         self.btn_fin_cal = Gtk.Button()
         self.btn_fin_cal.add_css_class("finance-action-btn")
         self.btn_fin_cal.set_tooltip_text("Due dates calendar")
-        self.btn_fin_cal.set_child(Gtk.Label(label="📅"))
+        # Icons.Filled.DateRange do app Android (Material Symbols "date_range")
+        self.btn_fin_cal.set_child(self._icone_msi("\ue916", "fin-ico-cal"))
         self.btn_fin_cal.connect("clicked", lambda *_: self._mostrar_finance_vista("calendario"))
         actions_box.append(self.btn_fin_cal)
 
         self.btn_fin_parcelas = Gtk.Button()
         self.btn_fin_parcelas.add_css_class("finance-action-btn")
         self.btn_fin_parcelas.set_tooltip_text("All installments")
-        self.btn_fin_parcelas.set_child(Gtk.Label(label="📋"))
+        # Icons.Filled.List do app Android
+        self.btn_fin_parcelas.set_child(self._icone_msi("\ue896", "fin-ico-list"))
         self.btn_fin_parcelas.connect("clicked", lambda *_: self._mostrar_finance_vista("parcelas"))
         actions_box.append(self.btn_fin_parcelas)
 
         self.btn_fin_refresh = Gtk.Button()
         self.btn_fin_refresh.add_css_class("finance-action-btn")
         self.btn_fin_refresh.set_tooltip_text("Sync")
-        self.btn_fin_refresh.set_child(Gtk.Label(label="↻"))
+        # Icons.Filled.Refresh do app Android
+        self.btn_fin_refresh.set_child(self._icone_msi("\ue5d5", "fin-ico-sync"))
         self.btn_fin_refresh.connect("clicked", lambda *_: self.pedir_finance())
         actions_box.append(self.btn_fin_refresh)
 
@@ -1188,7 +1328,8 @@ class SpookPadManager:
         # ===== FAB: Add Expense =====
         self.btn_fin_add = Gtk.Button()
         self.btn_fin_add.add_css_class("finance-fab")
-        self.btn_fin_add.set_child(Gtk.Label(label="+"))
+        # Icons.Filled.Add do app Android
+        self.btn_fin_add.set_child(self._icone_msi("\ue145", "fin-ico-add"))
         self.btn_fin_add.connect("clicked", lambda *_: self._abrir_form_expense(None))
         self.btn_fin_add.set_size_request(56, 56)
         # Position FAB at bottom-right using overlay
@@ -1345,8 +1486,8 @@ class SpookPadManager:
         if not despesas_mes:
             vazio = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
             vazio.add_css_class("finance-vazio")
-            ic = Gtk.Label(label="💳")
-            ic.add_css_class("finance-vazio-icon")
+            ic = Gtk.Label(label="\ue870")  # Icons.Filled.CreditCard
+            ic.add_css_class("fin-ico-empty")
             vazio.append(ic)
             t1 = Gtk.Label(label=f"No expenses in {meses_en[mes.month - 1]}")
             t1.add_css_class("finance-vazio-title")
@@ -1537,7 +1678,8 @@ class SpookPadManager:
         right.append(lbl_val)
 
         if paga:
-            chk = Gtk.Label(label="✓")
+            chk = Gtk.Label(label="\ue5ca")  # Icons.Filled.Check
+            chk.add_css_class("fin-ico-check")
             chk.add_css_class("finance-check-paid")
             right.append(chk)
 
@@ -1577,7 +1719,7 @@ class SpookPadManager:
 
         installments = exp.get("installments", 1)
         if installments > 1:
-            inst_amt = exp.get("installmentAmount", exp.get("valorParcela", 0))
+            inst_amt = exp.get("installment_amount", exp.get("installmentAmount", exp.get("valorParcela", 0)))
             lbl_inst = Gtk.Label(label=f"{installments}x · {self._fmt_brl(inst_amt)}", xalign=0)
             lbl_inst.add_css_class("finance-expense-inst")
             left.append(lbl_inst)
@@ -1603,7 +1745,7 @@ class SpookPadManager:
         # Delete button
         btn_del = Gtk.Button()
         btn_del.add_css_class("finance-btn-delete")
-        btn_del.set_child(Gtk.Label(label="🗑"))
+        btn_del.set_child(self._icone_msi("\ue872", "fin-ico-del"))  # Icons.Filled.Delete
         btn_del.connect("clicked", lambda *_, eid=exp["id"]: self._confirm_delete_expense(eid))
         card.append(btn_del)
 
@@ -1625,8 +1767,8 @@ class SpookPadManager:
         vazio.set_halign(Gtk.Align.CENTER)
         vazio.set_valign(Gtk.Align.CENTER)
 
-        ic = Gtk.Label(label="💳")
-        ic.add_css_class("finance-vazio-icon")
+        ic = Gtk.Label(label="\ue870")  # Icons.Filled.CreditCard
+        ic.add_css_class("fin-ico-empty")
         vazio.append(ic)
 
         t1 = Gtk.Label(label="No expenses yet")
@@ -1723,10 +1865,10 @@ class SpookPadManager:
         btn_toggle = Gtk.Button()
         btn_toggle.add_css_class("finance-toggle-btn")
         if paga:
-            btn_toggle.set_label("✓")
             btn_toggle.add_css_class("finance-toggle-on")
-        else:
-            btn_toggle.set_label("☐")
+        # Label filho com a classe: garante a fonte Material Symbols (herdar a
+        # fonte do botao nao funciona no GTK4).
+        btn_toggle.set_child(self._icone_msi("\ue834" if paga else "\ue835", "fin-ico-check"))
         btn_toggle.connect("clicked", lambda *_, pid=p["expense_id"], pi=p["parcela_index"]: self._toggle_parcela(pid, pi, not paga))
         right.append(btn_toggle)
 
@@ -1740,7 +1882,7 @@ class SpookPadManager:
 
     # ================================================================ CALENDAR V2
     def _criar_calendario_finance_v2(self):
-        """Create calendar view matching Android app."""
+        """Create calendar view matching Android app (Sunday-first grid)."""
         import datetime
 
         caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -1751,7 +1893,7 @@ class SpookPadManager:
         
         btn_back = Gtk.Button()
         btn_back.add_css_class("finance-cal-nav")
-        btn_back.set_child(Gtk.Label(label="←"))
+        btn_back.set_child(self._icone_msi("\ue5c4", "fin-nav-back"))  # arrow_back
         btn_back.connect("clicked", lambda *_: self._mostrar_finance_vista("dashboard"))
         hdr.append(btn_back)
 
@@ -1762,41 +1904,39 @@ class SpookPadManager:
 
         btn_prev = Gtk.Button()
         btn_prev.add_css_class("finance-cal-nav")
-        btn_prev.set_child(Gtk.Label(label="←"))
+        btn_prev.set_child(self._icone_msi("\ue5c4", "fin-nav-prev"))  # chevron_left
         btn_prev.connect("clicked", lambda *_: self._fin_cal_mudar_mes(-1))
         hdr.append(btn_prev)
 
-        btn_today = Gtk.Button()
+        btn_today = Gtk.Button(label="TODAY")
         btn_today.add_css_class("finance-cal-nav")
-        btn_today.set_child(Gtk.Label(label="TODAY"))
         btn_today.connect("clicked", lambda *_: self._fin_cal_ir_hoje())
         hdr.append(btn_today)
 
         btn_next = Gtk.Button()
         btn_next.add_css_class("finance-cal-nav")
-        btn_next.set_child(Gtk.Label(label="→"))
+        btn_next.set_child(self._icone_msi("\ue5c8", "fin-nav-next"))  # chevron_right
         btn_next.connect("clicked", lambda *_: self._fin_cal_mudar_mes(1))
         hdr.append(btn_next)
 
         caixa.append(hdr)
 
-        # Weekday headers (SUN-SAT)
-        weekdays_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
-        for wd in weekdays:
-            lbl = Gtk.Label(label=wd, xalign=0.5)
-            lbl.add_css_class("finance-cal-weekday")
-            lbl.set_hexpand(True)
-            lbl.set_size_request(-1, 24)
-            weekdays_box.append(lbl)
-        caixa.append(weekdays_box)
-
-        # Calendar grid
+        # Calendar grid with weekday headers in row 0 (Sunday-first)
         self.fin_cal_grid = Gtk.Grid()
         self.fin_cal_grid.set_row_spacing(2)
         self.fin_cal_grid.set_column_spacing(2)
         self.fin_cal_grid.set_margin_top(8)
         self.fin_cal_grid.set_margin_bottom(8)
+        self.fin_cal_grid.set_column_homogeneous(True)
+
+        # Weekday headers (row 0)
+        weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        for col, wd in enumerate(weekdays):
+            lbl = Gtk.Label(label=wd, xalign=0.5)
+            lbl.add_css_class("finance-cal-weekday")
+            lbl.set_hexpand(True)
+            lbl.set_size_request(-1, 28)
+            self.fin_cal_grid.attach(lbl, col, 0, 1, 1)
 
         cal_scroll = Gtk.ScrolledWindow()
         cal_scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -1835,13 +1975,30 @@ class SpookPadManager:
         self._render_finance_calendario_v2()
 
     def _render_finance_calendario_v2(self):
-        """Render calendar matching Android app (Sunday first)."""
+        """Render calendar matching Android app (Sunday first, row 0 = weekdays)."""
         import datetime
         import calendar as cal_mod
 
-        # Clear grid
+        # Clear grid (keep row 0 weekday headers)
+        children = list(self.fin_cal_grid)
+        for c in children:
+            child = c.get_child() if hasattr(c, 'get_child') else c
+            # Get position
+            if hasattr(self.fin_cal_grid, 'child_get_property'):
+                pass
+            # Simple approach: remove all, then re-add weekday headers
+        # Rebuild grid entirely for simplicity
         while (c := self.fin_cal_grid.get_first_child()):
             self.fin_cal_grid.remove(c)
+
+        # Re-add weekday headers (row 0)
+        weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]
+        for col, wd in enumerate(weekdays):
+            lbl = Gtk.Label(label=wd, xalign=0.5)
+            lbl.add_css_class("finance-cal-weekday")
+            lbl.set_hexpand(True)
+            lbl.set_size_request(-1, 28)
+            self.fin_cal_grid.attach(lbl, col, 0, 1, 1)
 
         # Clear installments list
         while (c := self.fin_cal_parcelas_box.get_first_child()):
@@ -1854,35 +2011,45 @@ class SpookPadManager:
 
         # Sunday first
         cal_mod.setfirstweekday(cal_mod.SUNDAY)
-        primeiro_dia_dom = (mes.weekday() + 1) % 7  # Convert Mon=0 to Sun=0
+        # mes is first day of month; weekday() returns Mon=0, Sun=6
+        # Convert to Sun=0: (weekday + 1) % 7
+        primeiro_dia_dom = (mes.weekday() + 1) % 7
         dias_no_mes = cal_mod.monthrange(mes.year, mes.month)[1]
         hoje = datetime.date.today()
         now_ms = int(time.time() * 1000)
 
-        # Group installments by day
+        # Group installments by day (including paid for color coding)
         parcelas_por_dia = {}
         parcelas_com_venc = []
+        tasks_por_dia = {}
         
         if hasattr(self, 'expenses') and self.expenses:
             for exp in self.expenses:
                 if exp.get("removido"):
                     continue
+                forma = (exp.get("payment_method") or exp.get("formaPagamento") or "").lower()
+                is_cartao_boleto = forma in ("credit card", "boleto", "cartão de crédito", "cartao de credito")
                 for i, p in enumerate(exp.get("parcelas", [])):
-                    if p.get("paga"):
-                        continue
                     due = p.get("dueDate") or p.get("due_date")
                     if not due:
                         continue
                     try:
                         dt = datetime.datetime.fromtimestamp(due / 1000).date()
                         if dt.year == mes.year and dt.month == mes.month:
+                            paga = bool(p.get("paga", False))
+                            # For credit card/boleto: show as pending until ALL installments paid
+                            if is_cartao_boleto:
+                                todas_pagas = all(parc.get("paga", False) for parc in exp.get("parcelas", []))
+                                if todas_pagas:
+                                    paga = True  # Show as paid only when all are paid
                             parcelas_por_dia.setdefault(dt.day, []).append({
                                 "expense_id": exp["id"],
                                 "expense_title": exp.get("title") or exp.get("titulo") or "Expense",
                                 "parcela_index": i,
                                 "valor": p.get("valor", p.get("amount", 0)),
                                 "due_date": due,
-                                "paga": p.get("paga", False),
+                                "paga": paga,
+                                "is_cartao_boleto": is_cartao_boleto,
                             })
                         parcelas_com_venc.append({
                             "expense_id": exp["id"],
@@ -1891,32 +2058,54 @@ class SpookPadManager:
                             "valor": p.get("valor", p.get("amount", 0)),
                             "due_date": due,
                             "paga": p.get("paga", False),
+                            "is_cartao_boleto": is_cartao_boleto,
                         })
                     except Exception:
                         pass
 
+        # Add tasks with due dates to calendar
+        if hasattr(self, 'tasks') and self.tasks:
+            for t in self.tasks:
+                if t.get("feito"):
+                    continue
+                due = t.get("due_date") or t.get("dueDate")
+                if not due:
+                    continue
+                try:
+                    dt = datetime.datetime.fromtimestamp(due / 1000).date()
+                    if dt.year == mes.year and dt.month == mes.month:
+                        tasks_por_dia.setdefault(dt.day, []).append({
+                            "task_id": t.get("id"),
+                            "task_title": t.get("titulo") or t.get("title") or "Task",
+                            "due_date": due,
+                        })
+                except Exception:
+                    pass
+
         parcelas_com_venc.sort(key=lambda p: p.get("due_date", 0))
 
-        # Fill calendar days
+        # Fill calendar days (rows 1-6, columns 0-6)
         dia = 1
         for semana in range(6):
             for col in range(7):
+                grid_row = semana + 1  # Row 0 is weekdays
                 if semana == 0 and col < primeiro_dia_dom:
                     box = Gtk.Box()
                     box.set_size_request(40, 50)
-                    self.fin_cal_grid.attach(box, col, semana + 1, 1, 1)
+                    self.fin_cal_grid.attach(box, col, grid_row, 1, 1)
                 elif dia <= dias_no_mes:
-                    cell = self._criar_celula_calendario_v2(dia, mes, hoje, parcelas_por_dia.get(dia, []), now_ms)
-                    self.fin_cal_grid.attach(cell, col, semana + 1, 1, 1)
+                    cell = self._criar_celula_calendario_v2(dia, mes, hoje, 
+                        parcelas_por_dia.get(dia, []), tasks_por_dia.get(dia, []), now_ms)
+                    self.fin_cal_grid.attach(cell, col, grid_row, 1, 1)
                     dia += 1
                 else:
                     box = Gtk.Box()
                     box.set_size_request(40, 50)
-                    self.fin_cal_grid.attach(box, col, semana + 1, 1, 1)
+                    self.fin_cal_grid.attach(box, col, grid_row, 1, 1)
 
-        # Render installments list
+        # Render installments list (all installments for the month, with colors)
         if not parcelas_com_venc:
-            lbl = Gtk.Label(label="No installments due this month", xalign=0.5)
+            lbl = Gtk.Label(label="No installments this month", xalign=0.5)
             lbl.add_css_class("finance-vazio")
             lbl.set_vexpand(True)
             self.fin_cal_parcelas_box.append(lbl)
@@ -1924,11 +2113,13 @@ class SpookPadManager:
             for p in parcelas_com_venc:
                 self.fin_cal_parcelas_box.append(self._criar_card_parcela_calendario_v2(p))
 
-    def _criar_celula_calendario_v2(self, dia, mes, hoje, parcelas_dia, now_ms):
-        """Create calendar cell matching Android."""
+    def _criar_celula_calendario_v2(self, dia, mes, hoje, parcelas_dia, tasks_dia, now_ms):
+        """Create calendar cell matching Android - shows installments and tasks."""
         import datetime
         eh_hoje = (dia == hoje.day and mes.month == hoje.month and mes.year == hoje.year)
-        tem_venc = len(parcelas_dia) > 0
+        tem_parcela = len(parcelas_dia) > 0
+        tem_task = len(tasks_dia) > 0
+        tem_venc = tem_parcela or tem_task
         tem_atrasada = any(p.get("due_date", 0) < now_ms for p in parcelas_dia)
 
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
@@ -1954,19 +2145,32 @@ class SpookPadManager:
             dots_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=2)
             dots_box.set_halign(Gtk.Align.CENTER)
             dots_box.add_css_class("finance-cal-dots")
-            for p in parcelas_dia[:3]:
+            
+            # Installment dots (max 2)
+            for p in parcelas_dia[:2]:
                 dot = Gtk.Box()
                 dot.set_size_request(6, 6)
-                if p.get("paga", False):
-                    dot.add_css_class("finance-cal-dot-paid")
+                paga = p.get("paga", False)
+                is_cartao_boleto = p.get("is_cartao_boleto", False)
+                if paga:
+                    dot.add_css_class("finance-cal-dot-paid")  # Cyan
+                elif is_cartao_boleto:
+                    dot.add_css_class("finance-cal-dot-pending")  # Amber (credit card/boleto always pending)
+                elif p.get("due_date", 0) < now_ms:
+                    dot.add_css_class("finance-cal-dot-overdue")  # Red
                 else:
-                    if p.get("due_date", 0) < now_ms:
-                        dot.add_css_class("finance-cal-dot-overdue")
-                    else:
-                        dot.add_css_class("finance-cal-dot-pending")
+                    dot.add_css_class("finance-cal-dot-pending")  # Amber
                 dots_box.append(dot)
-            if len(parcelas_dia) > 3:
-                mais = Gtk.Label(label=f"+{len(parcelas_dia)-3}", xalign=0.5)
+            
+            # Task indicator (calendar icon) if there are tasks
+            if tem_task:
+                task_dot = Gtk.Label()
+                task_dot.set_markup('<span font_family="Material Symbols Rounded" size="small">\ue916</span>')
+                task_dot.add_css_class("finance-cal-task-dot")
+                dots_box.append(task_dot)
+            
+            if len(parcelas_dia) + len(tasks_dia) > 3:
+                mais = Gtk.Label(label=f"+{len(parcelas_dia) + len(tasks_dia) - 3}", xalign=0.5)
                 mais.add_css_class("finance-cal-plus")
                 dots_box.append(mais)
             box.append(dots_box)
@@ -1974,19 +2178,33 @@ class SpookPadManager:
         return box
 
     def _criar_card_parcela_calendario_v2(self, p):
-        """Installment card for calendar list."""
+        """Installment card for calendar list - shows pending/paid with colors."""
         import time as time_mod
-        atrasada = p.get("due_date", 0) < int(time_mod.time() * 1000)
+        now_ms = int(time_mod.time() * 1000)
+        due_ms = p.get("due_date", 0)
+        atrasada = due_ms < now_ms
+        paga = bool(p.get("paga", False))
+        is_cartao_boleto = p.get("is_cartao_boleto", False)
+        
+        # For credit card/boleto: show as pending until ALL installments paid
+        # The paga flag already reflects this logic from _render_finance_calendario_v2
+        status_pendente = not paga
 
         card = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         card.add_css_class("finance-parcela-card")
-        if atrasada:
+        if atrasada and status_pendente:
             card.add_css_class("finance-parcela-overdue")
+        elif paga:
+            card.add_css_class("finance-parcela-paid")
 
         left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         left.set_hexpand(True)
 
-        lbl_title = Gtk.Label(label=f'{p["expense_title"]} · Installment {p["parcela_index"]+1}', xalign=0)
+        # Title with payment method indicator
+        title_parts = [p["expense_title"], f'Installment {p["parcela_index"]+1}']
+        if is_cartao_boleto:
+            title_parts.append("💳" if "credit" in (p.get("payment_method") or "").lower() else "📄")
+        lbl_title = Gtk.Label(label=" · ".join(title_parts), xalign=0)
         lbl_title.add_css_class("finance-parcela-title")
         left.append(lbl_title)
 
@@ -1995,19 +2213,30 @@ class SpookPadManager:
         valor = p.get("valor", 0)
         lbl_val = Gtk.Label(label=self._fmt_brl(valor), xalign=0)
         lbl_val.add_css_class("finance-parcela-valor")
-        if atrasada:
-            lbl_val.add_css_class("finance-overdue")
+        if paga:
+            lbl_val.add_css_class("finance-paid")  # Cyan
+        elif atrasada:
+            lbl_val.add_css_class("finance-overdue")  # Red
+        else:
+            lbl_val.add_css_class("finance-pending")  # Amber
         meta.append(lbl_val)
 
         from datetime import datetime as dt
         try:
-            due_str = dt.fromtimestamp(p["due_date"] / 1000).strftime("%m/%d")
-            due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+            due_str = dt.fromtimestamp(due_ms / 1000).strftime("%m/%d")
+            status_text = " · PAID" if paga else (" · OVERDUE" if atrasada else " · PENDING")
+            due_lbl = Gtk.Label(xalign=0)
+            due_lbl.set_markup(
+                f'<span font_family="Material Symbols Rounded">\ue916</span> {due_str}{status_text}'
+            )
             due_lbl.add_css_class("finance-parcela-meta")
-            if atrasada:
+            due_lbl.set_use_markup(True)
+            if paga:
+                due_lbl.add_css_class("finance-paid")
+            elif atrasada:
                 due_lbl.add_css_class("finance-overdue")
             else:
-                due_lbl.add_css_class("finance-warn")
+                due_lbl.add_css_class("finance-warn")  # Amber
             meta.append(due_lbl)
         except Exception:
             pass
@@ -2015,15 +2244,13 @@ class SpookPadManager:
         left.append(meta)
         card.append(left)
 
-        # Toggle button
+        # Toggle button - shows check_box (filled) for paid, check_box_outline_blank for pending
         btn_toggle = Gtk.Button()
         btn_toggle.add_css_class("finance-toggle-btn")
-        if p.get("paga", False):
-            btn_toggle.set_label("✓")
+        if paga:
             btn_toggle.add_css_class("finance-toggle-on")
-        else:
-            btn_toggle.set_label("☐")
-        btn_toggle.connect("clicked", lambda *_, pid=p["expense_id"], pi=p["parcela_index"]: self._toggle_parcela(pid, pi, not p.get("paga", False)))
+        btn_toggle.set_child(self._icone_msi("\ue834" if paga else "\ue835", "fin-ico-check"))
+        btn_toggle.connect("clicked", lambda *_, pid=p["expense_id"], pi=p["parcela_index"]: self._toggle_parcela(pid, pi, not paga))
         card.append(btn_toggle)
 
         return card
@@ -2034,11 +2261,30 @@ class SpookPadManager:
         import datetime
         
         editando = expense is not None
-        
+        expense = expense or {}
+
+        # Os campos registram-se em `_fin_form_data["widgets"]` logo ao serem
+        # criados: o dicionario TEM que existir antes de montar o formulario.
+        self._fin_form_data = {
+            "editando": editando,
+            "expense_id": expense.get("id") if editando else None,
+            "origem": expense.get("origem", "arch") if editando else "arch",
+            "widgets": {
+                "finance_desc": None,
+                "finance_total": None,
+                "finance_cat": None,
+                "finance_purchase_date": None,
+                "finance_parcelas": None,
+                "finance_valor_parcela": None,
+                "finance_first_due": None,
+                "finance_payment": None,
+            },
+        }
+
         dialog = Gtk.Window()
         dialog.set_title("EDIT EXPENSE" if editando else "NEW EXPENSE")
         dialog.set_modal(True)
-        dialog.set_transient_for(self.props.active_window)
+        dialog.set_transient_for(self.app.janela)
         dialog.set_default_size(480, 640)
         dialog.add_css_class("finance-form-dialog")
 
@@ -2086,11 +2332,19 @@ class SpookPadManager:
         content.append(self._criar_campo_numero("Number of installments", installments, "finance_parcelas", 1, 60))
 
         # Installment amount
-        inst_amt = expense.get("installmentAmount", expense.get("valorParcela", 0)) if editando else 0
+        inst_amt = 0
+        if editando:
+            inst_amt = expense.get(
+                "installment_amount",
+                expense.get("installmentAmount", expense.get("valorParcela", 0)),
+            )
         content.append(self._criar_campo_moeda("Installment amount (R$)", inst_amt, "finance_valor_parcela"))
 
         # First due date
-        first_due = expense.get("firstDueDate", expense.get("primeiroVencimento", int(time.time() * 1000))) if editando else int(time.time() * 1000)
+        first_due = expense.get(
+            "first_due_date",
+            expense.get("firstDueDate", expense.get("primeiroVencimento", int(time.time() * 1000))),
+        ) if editando else int(time.time() * 1000)
         content.append(self._criar_campo_data("First due date", first_due, "finance_first_due"))
 
         # Payment method
@@ -2107,6 +2361,10 @@ class SpookPadManager:
         content.append(self._criar_campo_dropdown("Payment method", forma_atual, formas, "finance_payment"))
 
         # Installment preview (if > 1 and not immediate payment)
+        try:
+            inst_amt = float(inst_amt or 0)
+        except (TypeError, ValueError):
+            inst_amt = 0.0
         self._fin_form_parcelas = installments
         self._fin_form_valor_parcela = inst_amt
         self._fin_form_first_due = first_due
@@ -2116,23 +2374,6 @@ class SpookPadManager:
         if installments > 1 and not self._fin_form_is_avista:
             self._fin_preview_box = self._criar_preview_parcelas(installments, inst_amt, first_due)
             content.append(self._fin_preview_box)
-
-        # Store references for form data
-        self._fin_form_data = {
-            "editando": editando,
-            "expense_id": expense.get("id") if editando else None,
-            "origem": expense.get("origem", "arch") if editando else "arch",
-            "widgets": {
-                "finance_desc": None,
-                "finance_total": None,
-                "finance_cat": None,
-                "finance_purchase_date": None,
-                "finance_parcelas": None,
-                "finance_valor_parcela": None,
-                "finance_first_due": None,
-                "finance_payment": None,
-            }
-        }
 
         # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -2175,15 +2416,19 @@ class SpookPadManager:
         self._fin_form_data["widgets"][key] = entry
         return box
 
-    def _criar_campo_moeda(self, label, valor_centavos, key):
+    def _criar_campo_moeda(self, label, valor_reais, key):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         lbl = Gtk.Label(label=label, xalign=0)
         lbl.add_css_class("finance-form-label")
         box.append(lbl)
 
         entry = Gtk.Entry()
-        if valor_centavos > 0:
-            entry.set_text(f"{valor_centavos / 100:.2f}".replace(".", ","))
+        try:
+            v = float(valor_reais)
+        except (TypeError, ValueError):
+            v = 0.0
+        if v > 0:
+            entry.set_text(f"{v:.2f}".replace(".", ","))
         entry.set_placeholder_text("0,00")
         entry.set_input_purpose(Gtk.InputPurpose.NUMBER)
         entry.add_css_class("finance-form-entry")
@@ -2245,7 +2490,12 @@ class SpookPadManager:
         if key == "finance_parcelas":
             self._fin_form_parcelas = value
         elif key == "finance_valor_parcela":
-            self._fin_form_valor_parcela = value
+            # O campo de moeda do formulario fala REAIS (igual ao relay).
+            try:
+                self._fin_form_valor_parcela = float(str(value).replace(",", "."))
+            except (TypeError, ValueError):
+                self._fin_form_valor_parcela = 0.0
+            self._atualizar_preview_parcelas()
         elif key == "finance_first_due":
             self._fin_form_first_due = value
         elif key == "finance_payment":
@@ -2307,20 +2557,21 @@ class SpookPadManager:
         
         # Remove old preview
         parent = self._fin_preview_box.get_parent()
-        if parent:
-            parent.remove(self._fin_preview_box)
-        
+        if parent is None:
+            self._fin_preview_box = None
+            return
+        parent.remove(self._fin_preview_box)
+
         # Recreate if needed
         if self._fin_form_parcelas > 1 and not self._fin_form_is_avista:
             self._fin_preview_box = self._criar_preview_parcelas(
                 self._fin_form_parcelas, self._fin_form_valor_parcela, self._fin_form_first_due)
-            # Find the payment method widget's parent and insert after it
             content = parent
             children = []
             while (c := content.get_first_child()):
                 children.append(c)
                 content.remove(c)
-            
+
             # Re-add all, inserting preview after payment method
             inserted = False
             for c in children:
@@ -2330,6 +2581,8 @@ class SpookPadManager:
                     inserted = True
             if not inserted:
                 content.append(self._fin_preview_box)
+        else:
+            self._fin_preview_box = None
 
     def _abrir_date_picker(self, key):
         """Open date picker dialog."""
@@ -2340,7 +2593,7 @@ class SpookPadManager:
         win = Gtk.Window()
         win.set_title("Select Date")
         win.set_modal(True)
-        win.set_transient_for(self.props.active_window)
+        win.set_transient_for(self.app.janela)
         win.set_default_size(320, 300)
         
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -2371,13 +2624,18 @@ class SpookPadManager:
         win.close()
 
     def _salvar_expense_form(self, dialog):
-        """Save expense from form."""
+        """Save expense from form (valores em REAIS, igual ao relay)."""
         w = self._fin_form_data["widgets"]
-        
+
+        def _num(txt):
+            try:
+                return float(str(txt).strip().replace(",", "."))
+            except (TypeError, ValueError):
+                return 0.0
+
         # Collect values
         desc = w["finance_desc"].get_text() if w["finance_desc"] else ""
-        total_text = w["finance_total"].get_text() if w["finance_total"] else "0"
-        total = int(float(total_text.replace(",", ".")) * 100)
+        total = _num(w["finance_total"].get_text() if w["finance_total"] else "0")
         cat = w["finance_cat"].get_active_text() if w["finance_cat"] else "other"
         purchase_ms = w["finance_purchase_date"].get_label() if w["finance_purchase_date"] else ""
         # Parse date from button label
@@ -2388,7 +2646,7 @@ class SpookPadManager:
             purchase_ms = int(time.time() * 1000)
         
         parcelas = self._fin_form_parcelas
-        valor_parcela = self._fin_form_valor_parcela
+        valor_parcela = _num(self._fin_form_valor_parcela)
         first_due = self._fin_form_first_due
         payment = self._fin_form_payment
 
@@ -2400,17 +2658,20 @@ class SpookPadManager:
             parcelas = 1
             first_due = purchase_ms
             valor_parcela = total
+        elif valor_parcela <= 0 and parcelas > 0:
+            # Sem valor de parcela informado: divide o total.
+            valor_parcela = round(total / parcelas, 2)
 
-        # Build expense data
+        # Build expense data (snake_case = formato canonico do relay/Drive)
         expense_data = {
-            "description": desc.strip(),
-            "totalAmount": total,
+            "title": desc.strip(),
+            "total_amount": round(total, 2),
             "category": cat,
-            "purchaseDate": purchase_ms,
+            "purchase_date": purchase_ms,
             "installments": parcelas,
-            "installmentAmount": valor_parcela,
-            "firstDueDate": first_due,
-            "paymentMethod": payment,
+            "installment_amount": round(valor_parcela, 2),
+            "first_due_date": first_due,
+            "payment_method": payment,
         }
 
         if self._fin_form_data["editando"]:
@@ -2475,7 +2736,7 @@ class SpookPadManager:
         dialog.set_buttons(["Cancel", "DELETE"])
         dialog.set_default_button(1)
         dialog.set_cancel_button(0)
-        dialog.choose(self.props.active_window, None, lambda d, r: self._do_delete_expense(expense_id) if r == 1 else None)
+        dialog.choose(self.app.janela, None, lambda d, r: self._do_delete_expense(expense_id) if r == 1 else None)
 
     def _confirm_delete_expense_form(self, expense_id, form_dialog):
         """Confirm delete from form."""
@@ -2489,7 +2750,7 @@ class SpookPadManager:
             if r == 1:
                 self._do_delete_expense(expense_id)
                 form_dialog.close()
-        dialog.choose(self.props.active_window, None, on_response)
+        dialog.choose(self.app.janela, None, on_response)
 
     def _do_delete_expense(self, expense_id):
         """Delete expense via relay HTTP."""
@@ -2510,11 +2771,11 @@ class SpookPadManager:
             self._finance_sync_status = f"Error: {e}"
         GLib.idle_add(lambda: (self._render_finance_dashboard(), False)[1])
 
-    def _fmt_brl(self, centavos):
-        """Format cents as BRL string."""
+    def _fmt_brl(self, valor):
+        """Formata um valor EM REAIS (o relay/Drive trafega reais, nao centavos)."""
         try:
-            return f"R$ {centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        except:
+            return "R$ " + f"{float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except (TypeError, ValueError):
             return "R$ 0,00"
 
 
@@ -2605,7 +2866,12 @@ class SpookPadManager:
             try:
                 due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m")
                 atrasada = due < int(time.time() * 1000)
-                due_lbl = Gtk.Label(label=f"📅 {due_str}{' · OVERDUE' if atrasada else ''}", xalign=0)
+                due_lbl = Gtk.Label(xalign=0)
+                due_lbl.set_markup(
+                    f'<span font_family="Material Symbols Rounded">\ue916</span> {due_str}'
+                    f'{" · OVERDUE" if atrasada else ""}'
+                )
+                due_lbl.set_use_markup(True)
                 due_lbl.add_css_class("pad-task-meta")
                 if atrasada:
                     due_lbl.add_css_class("spook-err")
@@ -2618,11 +2884,11 @@ class SpookPadManager:
         conteudo.append(meta)
         card.append(conteudo)
 
-        # Botão para definir/editar vencimento
-        cal_btn = Gtk.Button(label="📅")
+        # Botão para definir/editar vencimento (Icons.Filled.DateRange do app)
+        cal_btn = Gtk.Button()
         cal_btn.add_css_class("spook-btn")
-        cal_btn.add_css_class("spook-msi-btn")
         cal_btn.set_tooltip_text("Set due date")
+        cal_btn.set_child(self._icone_msi("\ue916", "fin-ico-cal"))
         cal_btn.connect("clicked", lambda *_: self._abrir_due_date_dialog(t))
         card.append(cal_btn)
 
@@ -3373,8 +3639,15 @@ class SpookPadManager:
         try:
             if due:
                 dt = datetime.datetime.fromtimestamp(due / 1000)
-                self._due_cal.select_month(dt.month - 1, dt.year)
-                self._due_cal.select_day(dt.day)
+                # GTK 4.24 rework: set_year/set_month (0-based)/set_day no lugar de
+                # select_month/select_day (que agora recebe GLib.DateTime).
+                if hasattr(self._due_cal, "set_year"):
+                    self._due_cal.set_year(dt.year)
+                    self._due_cal.set_month(dt.month - 1)
+                    self._due_cal.set_day(dt.day)
+                else:
+                    self._due_cal.select_month(dt.month - 1, dt.year)
+                    self._due_cal.select_day(dt.day)
         except Exception:
             pass
         caixa.append(self._due_cal)
@@ -3405,8 +3678,16 @@ class SpookPadManager:
 
     def _due_date_confirm(self, win, task):
         try:
-            ano, mes, dia = self._due_cal.get_date()
-            dt = datetime.datetime(ano, mes + 1, dia, 23, 59, 59)
+            # GTK4: get_date() devolve GLib.DateTime (get_month() é 1-based).
+            # Nas versões antigas do PyGObject devolvia a tupla (ano, mes0, dia).
+            valor = self._due_cal.get_date()
+            if isinstance(valor, tuple):
+                ano, mes0, dia = valor
+            else:
+                ano = valor.get_year()
+                mes0 = valor.get_month() - 1
+                dia = valor.get_day_of_month()
+            dt = datetime.datetime(ano, mes0 + 1, dia, 23, 59, 59)
             due_ms = int(dt.timestamp() * 1000)
             if callable(self.task_due_cb):
                 self.task_due_cb(task.get("id"), due_ms)

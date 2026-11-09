@@ -117,7 +117,24 @@ CSS = """
 .finance-cal-dot-pending { background: #FFC400; border-radius: 50%; min-width: 6px; min-height: 6px; }
 .finance-cal-dot-overdue { background: #FF5C6C; border-radius: 50%; min-width: 6px; min-height: 6px; }
 .finance-cal-dot-paid { background: #5CE1E6; border-radius: 50%; min-width: 6px; min-height: 6px; }
+.finance-cal-task-dot { color: #5CE1E6; font-size: 10px; }
 .finance-cal-plus { font-size: 8px; color: #8A8F98; }
+
+.finance-parcela-card { background: #16141F; border: 1px solid #2A2736; border-radius: 10px; padding: 8px 12px; }
+.finance-parcela-overdue { border-color: #FF5C6C; background: rgba(255, 92, 108, 0.08); }
+.finance-parcela-paid { border-color: #5CE1E6; background: rgba(92, 225, 230, 0.08); }
+
+.finance-parcela-title { font-size: 12px; font-weight: 600; color: #F4F1FF; }
+.finance-parcela-valor { font-size: 13px; font-weight: 700; font-family: "JetBrains Mono", monospace; }
+.finance-parcela-valor.finance-paid { color: #5CE1E6; }
+.finance-parcela-valor.finance-pending { color: #FFC400; }
+.finance-parcela-valor.finance-overdue { color: #FF5C6C; }
+
+.finance-parcela-meta { font-size: 11px; color: #8A8F98; font-family: "JetBrains Mono", monospace; }
+.finance-parcela-meta.finance-paid { color: #5CE1E6; }
+.finance-parcela-meta.finance-warn { color: #FFC400; }
+.finance-parcela-meta.finance-overdue { color: #FF5C6C; }
+
 .finance-form-dialog { background: #0B0A12; }
 .finance-form-scroll { background: transparent; }
 .finance-form-label { font-size: 11px; font-weight: 700; color: #8A8F98; letter-spacing: 0.5px; margin-bottom: 4px; }
@@ -329,6 +346,32 @@ button.spook-tab-on {
 .spook-btn-text-sm { font-size: 11px; font-weight: 600; }
 .spook-cmd-danger { border-color: #FF5C6C; }
 
+    /* ============================ IA CHAT ============================ */
+    .ia-title { font-size: 20px; font-weight: 700; color: #F4F1FF; font-family: "JetBrains Mono", "JetBrainsMono NF", monospace; }
+    .ia-status-online { font-size: 12px; color: #5CE1E6; font-family: "JetBrains Mono", "JetBrainsMono NF", monospace; }
+    .ia-status-offline { font-size: 12px; color: #FFC400; font-family: "JetBrains Mono", "JetBrainsMono NF", monospace; }
+    .ia-clear-btn { background: transparent; color: #FF5C6C; border: 1px solid #FF5C6C; border-radius: 8px; padding: 4px 12px; font-size: 11px; font-weight: 600; }
+    .ia-clear-btn:hover { background: rgba(255, 92, 108, 0.15); }
+
+    .ia-msg-card { background: #16141F; border: 1px solid #3A3648; border-radius: 16px; padding: 12px 14px; margin: 4px 0; transition: all 140ms ease; }
+    .ia-msg-card:hover { background: #1E1C2A; border-color: #6E6A81; }
+    .ia-msg-card-user { background: rgba(255, 77, 154, 0.12); border-color: rgba(255, 77, 154, 0.3); }
+    .ia-msg-card-user:hover { background: rgba(255, 77, 154, 0.18); border-color: #FF4D9A; }
+
+    .ia-msg-header { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
+    .ia-msg-header-user { color: #FF4D9A; }
+    .ia-msg-header-ia { color: #5CE1E6; }
+
+    .ia-msg-text { font-size: 13px; color: #F4F1FF; line-height: 1.5; }
+    .ia-msg-actions { }
+    .ia-msg-action-btn { background: transparent; color: #8A8F98; border: none; border-radius: 6px; padding: 4px; font-size: 14px; min-width: 28px; min-height: 28px; }
+    .ia-msg-action-btn:hover { background: rgba(255, 77, 154, 0.14); color: #FF4D9A; }
+    .ia-msg-action-btn-del:hover { background: rgba(255, 92, 108, 0.15); color: #FF5C6C; }
+
+    .ia-thinking { font-size: 13px; color: #B44AFF; font-style: italic; padding: 8px 12px; margin: 4px 0; }
+    .ia-input { background: #16141F; color: #F4F1FF; border: 1px solid #3A3648; border-radius: 22px; padding: 10px 16px; font-size: 13px; transition: all 140ms ease; }
+    .ia-input:focus { border-color: #FF4D9A; box-shadow: 0 0 0 3px rgba(255, 77, 154, 0.15); }
+
 notebook.spook-tabs > stack { background: #0B0A12; }
 notebook.spook-tabs > stack > * { background: transparent; }
 scrolledwindow, scrolledwindow > viewport { background: transparent; }
@@ -532,6 +575,7 @@ class SpookOverlay(Gtk.Application):
         super().__init__(application_id="com.taylor.spook.overlay")
         self._chat_msgs = {}   # id -> msg (cache vivo; socket + espelho reconciliam)
         self._tasks_cache = {}   # id -> task (socket do relay; o PAD desenha)
+        self._finance_cache = {}  # id -> expense (socket do relay; o PAD desenha)
         self._chat_last_merge = ""
         self._chat_last_draw = ""
         self._socket_online = False
@@ -690,8 +734,14 @@ class SpookOverlay(Gtk.Application):
         self.pad_mgr.finance_parcela_cb = self._finance_parcela_toggle
         pagina_pad = self.pad_mgr.criar_pagina()
         tabs.append_page(pagina_pad, _aba_icone_texto("note", "PAD"))
+        # IA: chat com memória compartilhada via relay (/ia namespace)
+        # Shared session ID for memory sync with phone IA
+        self.ia_sessao_id = "taylor-persistent"
+        pagina_ia = self._criar_pagina_ia()
+        tabs.append_page(pagina_ia, _aba_icone_texto("robot", "IA"))
         self._pagina_leitor = pagina_leitor
         self._pagina_pad = pagina_pad
+        self._pagina_ia = pagina_ia
         self._tabs = tabs
         tabs.connect("switch-page", self._ao_trocar_aba)
         raiz.append(tabs)
@@ -865,6 +915,14 @@ class SpookOverlay(Gtk.Application):
             return img
         except Exception:
             return Gtk.Label(label="")
+
+    def _icone_msi(self, glifo, *classes):
+        """Label com um glifo Material Symbols Rounded (mesmo ícone do app Android)."""
+        lbl = Gtk.Label(label=glifo)
+        lbl.add_css_class("fin-ico")
+        for classe in classes:
+            lbl.add_css_class(classe)
+        return lbl
 
     def _icone_metric(self, chave, tamanho=18):
         """Cria um label com ícone Material Symbols para métricas (como no app Android)."""
@@ -1497,6 +1555,253 @@ class SpookOverlay(Gtk.Application):
         self._atualizar_botoes_filtro()
         self._render_galeria()
 
+    # =========================================================== IA PAGE
+    def _criar_pagina_ia(self):
+        """IA chat page with shared memory via relay (/ia namespace) - matches Android TelaChatIa.kt."""
+        caixa = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        caixa.add_css_class("spook-root")
+        caixa.set_margin_start(16)
+        caixa.set_margin_end(16)
+        caixa.set_margin_top(16)
+        caixa.set_margin_bottom(16)
+
+        # Header with title, connection status, and Clear button
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        header.set_valign(Gtk.Align.CENTER)
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title_box.set_hexpand(True)
+
+        titulo = Gtk.Label(label="SPOOK AI", xalign=0)
+        titulo.add_css_class("ia-title")
+        title_box.append(titulo)
+
+        self.ia_status_label = Gtk.Label(label="Online · notebook offline", xalign=0)
+        self.ia_status_label.add_css_class("ia-status-offline")
+        title_box.append(self.ia_status_label)
+
+        header.append(title_box)
+
+        # Clear button
+        self.ia_clear_btn = Gtk.Button(label="Clear")
+        self.ia_clear_btn.add_css_class("ia-clear-btn")
+        self.ia_clear_btn.set_sensitive(False)
+        self.ia_clear_btn.connect("clicked", lambda *_: self._ia_limpar())
+        header.append(self.ia_clear_btn)
+
+        caixa.append(header)
+
+        # Chat area (ScrolledWindow with vertical Box for messages)
+        self.ia_scrolled = Gtk.ScrolledWindow()
+        self.ia_scrolled.set_vexpand(True)
+        self.ia_scrolled.set_hexpand(True)
+        self.ia_scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+
+        self.ia_chat_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.ia_chat_box.set_margin_top(8)
+        self.ia_chat_box.set_margin_bottom(8)
+        self.ia_scrolled.set_child(self.ia_chat_box)
+        caixa.append(self.ia_scrolled)
+
+        # Thinking indicator (initially hidden)
+        self.ia_thinking_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.ia_thinking_box.set_visible(False)
+        thinking_lbl = Gtk.Label(label="SPOOK is thinking...")
+        thinking_lbl.add_css_class("ia-thinking")
+        self.ia_thinking_box.append(thinking_lbl)
+        caixa.append(self.ia_thinking_box)
+
+        # Input area
+        input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.ia_entry = Gtk.Entry()
+        self.ia_entry.set_hexpand(True)
+        self.ia_entry.set_placeholder_text("Ask SPOOK...")
+        self.ia_entry.add_css_class("ia-input")
+        self.ia_entry.connect("activate", lambda *_: self._ia_enviar())
+        input_box.append(self.ia_entry)
+
+        self.ia_send_btn = Gtk.Button()
+        self.ia_send_btn.add_css_class("spook-btn")
+        self.ia_send_btn.add_css_class("spook-accent")
+        self.ia_send_btn.set_child(self._icone_msi("\ue145", "fin-ico-add"))
+        self.ia_send_btn.connect("clicked", lambda *_: self._ia_enviar())
+        input_box.append(self.ia_send_btn)
+
+        caixa.append(input_box)
+
+        # Initialize message list and loading state
+        self.ia_mensagens = []  # list of dicts: {"texto": str, "usuario": bool}
+        self.ia_carregando = False
+
+        return caixa
+
+    def _ia_limpar(self):
+        """Clear all messages."""
+        self.ia_mensagens.clear()
+        self._ia_render_mensagens()
+        self.ia_clear_btn.set_sensitive(False)
+
+    def _ia_enviar(self):
+        texto = (self.ia_entry.get_text() or "").strip()
+        if not texto or self.ia_carregando:
+            return
+        # Add user message
+        self.ia_mensagens.append({"texto": texto, "usuario": True})
+        self.ia_entry.set_text("")
+        self._ia_render_mensagens()
+        self.ia_clear_btn.set_sensitive(True)
+        self.ia_carregando = True
+        self.ia_send_btn.set_sensitive(False)
+        self.ia_entry.set_sensitive(False)
+        self.ia_thinking_box.set_visible(True)
+        self._ia_scroll_fim()
+
+        if hasattr(self, "sio") and getattr(self.sio, "connected", False):
+            print(f"[OVERLAY] Sending chat_ia_perguntar: {texto}", flush=True)
+            self.sio.emit("chat_ia_perguntar", {
+                "pergunta": texto,
+                "sessao_id": self.ia_sessao_id,
+                "usuario": "arch"
+            }, namespace="/ia")
+            print(f"[OVERLAY] Event sent, sio.connected={self.sio.connected}", flush=True)
+            # Check namespace connection
+            if hasattr(self.sio, 'namespaces') and '/ia' in self.sio.namespaces:
+                ns = self.sio.namespaces['/ia']
+                print(f"[OVERLAY] /ia namespace connected: {getattr(ns, 'connected', 'unknown')}", flush=True)
+        else:
+            self._ia_on_resposta({"ok": False, "resposta": "Socket não conectado", "motor": ""})
+
+    def _ia_render_mensagens(self):
+        """Re-render all messages as cards (like LazyColumn in Android)."""
+        # Clear existing children
+        child = self.ia_chat_box.get_first_child()
+        while child:
+            next_child = child.get_next_sibling()
+            self.ia_chat_box.remove(child)
+            child = next_child
+
+        for idx, msg in enumerate(self.ia_mensagens):
+            self._ia_adicionar_mensagem_card(msg["texto"], msg["usuario"], idx)
+
+        # Add thinking indicator as a "message" if loading
+        if self.ia_carregando:
+            thinking_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            thinking_box.add_css_class("ia-msg-card")
+            thinking_lbl = Gtk.Label(label="SPOOK is thinking...")
+            thinking_lbl.add_css_class("ia-thinking")
+            thinking_box.append(thinking_lbl)
+            self.ia_chat_box.append(thinking_box)
+
+    def _ia_adicionar_mensagem_card(self, texto, usuario, idx):
+        """Add a single message as a card with header (YOU/SPOOK), copy/delete actions, and text."""
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        card.add_css_class("ia-msg-card")
+        if usuario:
+            card.add_css_class("ia-msg-card-user")
+
+        # Header row: label (YOU/SPOOK) + actions (copy, delete)
+        header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        header_row.set_hexpand(True)
+
+        lbl_header = Gtk.Label(label="YOU" if usuario else "SPOOK", xalign=0)
+        lbl_header.add_css_class("ia-msg-header")
+        lbl_header.add_css_class("ia-msg-header-user" if usuario else "ia-msg-header-ia")
+        header_row.append(lbl_header)
+
+        # Spacer to push actions to the right
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        header_row.append(spacer)
+
+        # Copy button
+        copy_btn = Gtk.Button()
+        copy_btn.add_css_class("ia-msg-action-btn")
+        copy_btn.set_child(self._icone_msi("\ue14d", "fin-ico"))  # content_copy
+        copy_btn.set_tooltip_text("Copy")
+        copy_btn.connect("clicked", lambda _, t=texto: self._copiar_clipboard(t))
+        header_row.append(copy_btn)
+
+        # Delete button
+        del_btn = Gtk.Button()
+        del_btn.add_css_class("ia-msg-action-btn")
+        del_btn.add_css_class("ia-msg-action-btn-del")
+        del_btn.set_child(self._icone_msi("\ue872", "fin-ico-del"))  # delete
+        del_btn.set_tooltip_text("Delete")
+        del_btn.connect("clicked", lambda _, i=idx: self._ia_apagar_mensagem(i))
+        header_row.append(del_btn)
+
+        card.append(header_row)
+
+        # Message text
+        lbl_text = Gtk.Label(label=texto, xalign=0, wrap=True)
+        lbl_text.add_css_class("ia-msg-text")
+        lbl_text.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        lbl_text.set_max_width_chars(80)
+        lbl_text.set_selectable(True)
+        card.append(lbl_text)
+
+        self.ia_chat_box.append(card)
+
+    def _ia_apagar_mensagem(self, idx):
+        """Delete a message by index."""
+        if 0 <= idx < len(self.ia_mensagens):
+            self.ia_mensagens.pop(idx)
+            self._ia_render_mensagens()
+            if not self.ia_mensagens:
+                self.ia_clear_btn.set_sensitive(False)
+
+    def _copiar_clipboard(self, texto):
+        """Copy text to clipboard."""
+        try:
+            clipboard = self.get_clipboard()
+            clipboard.set_text(texto)
+        except Exception:
+            pass
+
+    def _ia_scroll_fim(self):
+        """Auto-scroll to bottom."""
+        def _scroll():
+            adj = self.ia_scrolled.get_vadjustment()
+            if adj:
+                adj.set_value(adj.get_upper())
+        GLib.idle_add(_scroll)
+
+    def _ia_on_resposta(self, dados):
+        """Handler para chat_ia_resposta no namespace /ia."""
+        self.ia_carregando = False
+        self.ia_send_btn.set_sensitive(True)
+        self.ia_entry.set_sensitive(True)
+        self.ia_thinking_box.set_visible(False)
+
+        ok = (dados or {}).get("ok", False)
+        resposta = (dados or {}).get("resposta", "")
+        motor = (dados or {}).get("motor", "")
+
+        if ok:
+            # Append motor info if available
+            if motor:
+                resposta = f"{resposta}  [{motor}]"
+            self.ia_mensagens.append({"texto": resposta, "usuario": False})
+        else:
+            self.ia_mensagens.append({"texto": f"⚠ {resposta}", "usuario": False})
+
+        self._ia_render_mensagens()
+        self.ia_clear_btn.set_sensitive(True)
+        self._ia_scroll_fim()
+
+    def _ia_atualizar_status_conexao(self, online):
+        """Update IA header connection status."""
+        if not hasattr(self, "ia_status_label") or not self.ia_status_label:
+            return
+        if online:
+            self.ia_status_label.set_text("Online · notebook connected")
+            self.ia_status_label.remove_css_class("ia-status-offline")
+            self.ia_status_label.add_css_class("ia-status-online")
+        else:
+            self.ia_status_label.set_text("Online · notebook offline")
+            self.ia_status_label.remove_css_class("ia-status-online")
+            self.ia_status_label.add_css_class("ia-status-offline")
+
     def _atualizar_botoes_filtro(self):
         for chave, btn in getattr(self, "galeria_filter_btns", {}).items():
             cls = f"spook-gal-filter-{chave}-on"
@@ -2042,8 +2347,10 @@ class SpookOverlay(Gtk.Application):
                 token = None
             self.sio = socketio.Client(reconnection=True, reconnection_attempts=10, reconnection_delay=2)
             auth = {"token": token, "device": "overlay"} if token else None
-            self.sio.connect(SOCKET_URL, auth=auth, wait_timeout=10)
 
+            # Os handlers TEM que existir ANTES do connect: o relay manda
+            # `celular_presenca` (e o estado atual) no instante do handshake; o
+            # evento chegava antes do registro e era descartado (PHONE OFF falso).
             @self.sio.on("chat_nova")
             def on_chat_nova(msg):
                 if isinstance(msg, dict) and msg.get("id"):
@@ -2115,13 +2422,121 @@ class SpookOverlay(Gtk.Application):
             @self.sio.on("celular_presenca")
             def on_celular_presenca(dados):
                 self._presenca_celular = bool((dados or {}).get("online"))
-                GLib.idle_add(lambda: self._atualizar_status(self._presenca_celular))
+                GLib.idle_add(self._aplicar_presenca)
 
+            @self.sio.on("celular_presenca_resposta")
+            def on_celular_presenca_resposta(dados):
+                self._presenca_celular = bool((dados or {}).get("online"))
+                GLib.idle_add(self._aplicar_presenca)
+
+            # ── FINANCE: o relay responde `finance_lista`/`finance_atualizada`;
+            #    sem estes handlers o PAD ficava vazio mesmo com socket ligado.
+            def _aplicar_finance_cache():
+                self.pad_mgr.aplicar_finance(list(self._finance_cache.values()))
+
+            @self.sio.on("finance_lista")
+            def on_finance_lista(d):
+                print(f"finance_lista received: {len((d or {}).get('expenses',[]))} expenses", flush=True)
+                exps = (d or {}).get("expenses", [])
+                self._finance_cache = {
+                    e.get("id"): e for e in exps
+                    if isinstance(e, dict) and e.get("id")
+                }
+                _aplicar_finance_cache()
+
+            @self.sio.on("finance_nova")
+            def on_finance_nova(e):
+                if isinstance(e, dict) and e.get("id"):
+                    self._finance_cache[e["id"]] = e
+                _aplicar_finance_cache()
+
+            @self.sio.on("finance_atualizada")
+            def on_finance_atualizada(e):
+                if isinstance(e, dict) and e.get("id"):
+                    self._finance_cache[e["id"]] = e
+                _aplicar_finance_cache()
+
+            @self.sio.on("finance_apagada")
+            def on_finance_apagada(d):
+                fid = (d or {}).get("id")
+                if fid:
+                    self._finance_cache.pop(fid, None)
+                _aplicar_finance_cache()
+
+            # IA namespace handler (for _ia_enviar responses)
+            @self.sio.on("chat_ia_resposta", namespace="/ia")
+            def on_chat_ia_resposta(dados):
+                print(f"[OVERLAY] Received chat_ia_resposta: {dados}", flush=True)
+                GLib.idle_add(lambda: self._ia_on_resposta(dados))
+
+            @self.sio.on("connect", namespace="/ia")
+            def on_ia_connect():
+                print(f"[OVERLAY] /ia namespace connected", flush=True)
+
+            @self.sio.on("*", namespace="/ia")
+            def on_ia_catch_all(event, data):
+                print(f"[OVERLAY] /ia catch-all: {event} = {data}", flush=True)
+
+            @self.sio.on("*")
+            def on_catch_all(event, data):
+                print(f"[OVERLAY] default catch-all: {event} = {data}", flush=True)
+
+            @self.sio.on("connect")
+            def on_connect():
+                self._socket_online = True
+                # Update IA status label
+                if hasattr(self, "ia_status_label") and self.ia_status_label:
+                    GLib.idle_add(lambda: self._ia_atualizar_status_conexao(True))
+                # Request current phone presence state (relay emits celular_presenca on connect,
+                # but we also explicitly ask in case it was missed during handshake)
+                try:
+                    self.sio.emit("celular_presenca_pedir", {})
+                except Exception:
+                    pass
+                self._bg(self._puxar_lists)
+                # Test IA send after 3 seconds - DISABLED (causes repeat due to idle_add)
+                # GLib.idle_add(lambda: GLib.timeout_add_seconds(3, self._test_ia_send))
+
+            @self.sio.on("disconnect")
+            def on_disconnect():
+                self._socket_online = False
+                if hasattr(self, "ia_status_label") and self.ia_status_label:
+                    GLib.idle_add(lambda: self._ia_atualizar_status_conexao(False))
+
+            self.sio.connect(SOCKET_URL, auth=auth, wait_timeout=10, namespaces=["/", "/ia"])
+            print(f"[OVERLAY] Socket connected: {self.sio.connected}", flush=True)
+            print(f"[OVERLAY] Socket namespaces: {list(self.sio.namespaces.keys()) if hasattr(self.sio, 'namespaces') else 'N/A'}", flush=True)
             self._socket_online = True
             self._bg(self._puxar_lists)
         except Exception:
             self.sio = None
             self._socket_online = False
+
+    def _test_ia_send(self):
+        """Test IA send after socket connects."""
+        print(f"[OVERLAY] _test_ia_send called", flush=True)
+        if hasattr(self, "sio") and getattr(self.sio, "connected", False):
+            print(f"[OVERLAY] Sending test chat_ia_perguntar", flush=True)
+            self.sio.emit("chat_ia_perguntar", {
+                "pergunta": "Teste automatico do overlay",
+                "sessao_id": self.ia_sessao_id,
+                "usuario": "arch"
+            }, namespace="/ia")
+            print(f"[OVERLAY] Test event sent", flush=True)
+        return False  # Don't repeat
+
+    def _aplicar_presenca(self):
+        """Presenca do celular mudou: reflete no header e na linha ANDROID."""
+        if self.status_label is not None:
+            self._atualizar_status(self._presenca_celular)
+        if self.android_online_label is not None:
+            online = self._presenca_celular
+            self.android_online_label.set_text("● ONLINE" if online else "○ OFFLINE")
+            self.android_online_label.remove_css_class("spook-ok")
+            self.android_online_label.remove_css_class("spook-err")
+            self.android_online_label.add_css_class("spook-ok" if online else "spook-err")
+            self.android_online_label.add_css_class("spook-metric")
+        return False
 
     def _atualizar_status(self, celular_online=False):
         """Cabecalho no mesmo espirito do app: SPOOK // <estado> em mono."""
@@ -2145,10 +2560,14 @@ class SpookOverlay(Gtk.Application):
     def _puxar_lists(self):
         try:
             if self.sio and getattr(self.sio, "connected", False):
+                print("_puxar_lists: emitting", flush=True)
                 self.sio.emit("chat_listar", {})
                 self.sio.emit("task_listar", {})
-        except Exception:
-            pass
+                self.sio.emit("finance_listar", {})
+            else:
+                print("_puxar_lists: socket not connected", flush=True)
+        except Exception as e:
+            print(f"_puxar_lists error: {e}", flush=True)
 
     # ── TAREFAS (dentro do PAD) ──
     def _tarefas_pedir(self):
@@ -2197,6 +2616,18 @@ class SpookOverlay(Gtk.Application):
         self._bg(lambda: (hub_store.apagar_task(task_id), self._tarefas_do_hub()))
 
     def _tarefa_atualizar_due_date(self, task_id, due_date):
+        # Reflete na hora no cache local (o eco do relay chega depois e confirma)
+        try:
+            if task_id in self._tasks_cache:
+                t = dict(self._tasks_cache[task_id])
+                if due_date:
+                    t["due_date"] = int(due_date)
+                else:
+                    t.pop("due_date", None)
+                self._tasks_cache[task_id] = t
+                self.pad_mgr.aplicar_tarefas(list(self._tasks_cache.values()))
+        except Exception:
+            pass
         try:
             if self.sio and getattr(self.sio, "connected", False):
                 self.sio.emit("task_due_date", {"id": task_id, "due_date": due_date})
