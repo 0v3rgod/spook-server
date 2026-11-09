@@ -851,6 +851,49 @@ def _sorted_expenses(merged: dict):
     return sorted(merged.values(), key=lambda e: (-e.get("em", 0)))
 
 
+def _reparar_avista(expenses):
+    """Auto-reparo: despesa a vista com parcela pendente vira paga.
+
+    Registros criados antes do fix ficaram com paga=False no Drive, e isso
+    aparecia como parcela pendente em todos os aparelhos. Aqui o registro e
+    corrigido (em = agora, para vencer o LWW) e reenviado ao Drive.
+    """
+    mudou = {}
+    agora = int(time.time() * 1000)
+    for e in expenses.values():
+        if e.get("removido"):
+            continue
+        forma = (e.get("payment_method") or e.get("formaPagamento") or "").lower()
+        if forma not in FORMAS_A_VISTA:
+            continue
+        parcelas = e.get("parcelas", [])
+        # a vista tem SEMPRE 1 parcela: com mais de uma e' dado antigo
+        # (criado quando tudo virava "pix") e nao pode ser marcado pago.
+        if len(parcelas) != 1:
+            continue
+        devendo = [p for p in parcelas if not p.get("paga")]
+        if not devendo:
+            continue
+        for p in devendo:
+            p["paga"] = True
+            if not p.get("paidDate"):
+                p["paidDate"] = agora
+        e["em"] = agora
+        mudou[e["id"]] = e
+    if mudou:
+        try:
+            with threading.Lock():
+                merged = _ler_cache_finance()
+                merged.update(mudou)
+                _salvar_cache_finance(merged)
+                for e in mudou.values():
+                    _gravar_finance_local(e)
+                    _fpin(e)
+        except Exception:
+            pass
+    return expenses
+
+
 def listar_expenses():
     """Leitura instantanea do espelho local (mesmo principio do chat/tasks)."""
     locais = {}
@@ -873,16 +916,99 @@ def listar_expenses():
         if not rec.get("__del") and rec.get("id"):
             locais[fid] = rec
     _salvar_cache_finance(locais)
-    return _sorted_expenses(locais)
+    return _sorted_expenses(_reparar_avista(locais))
+
+
+# ---- pagamento a vista (PIX / debito / dinheiro / transferencia / boleto) ----
+# A parcela nasce PAGA: despesa a vista nunca aparece como "pendente".
+FORMAS_A_VISTA = {
+    "pix",
+    "cartão de débito", "cartao de debito", "debit card",
+    "dinheiro", "cash",
+    "transferência", "transferencia", "transfer",
+    "boleto",
+}
+
+
+def _normaliza_expense(d):
+    """Aceita camelCase (overlay) e PT (app antigo) e devolve o canonico."""
+    if not isinstance(d, dict):
+        return d
+    mapa = {
+        "paymentMethod": "payment_method",
+        "formaPagamento": "payment_method",
+        "totalAmount": "total_amount",
+        "valorTotal": "total_amount",
+        "purchaseDate": "purchase_date",
+        "dataCompra": "purchase_date",
+        "installmentAmount": "installment_amount",
+        "valorParcela": "installment_amount",
+        "firstDueDate": "first_due_date",
+        "primeiroVencimento": "first_due_date",
+        "description": "title",
+        "titulo": "title",
+    }
+    for origem, destino in mapa.items():
+        if destino not in d and d.get(origem) not in (None, ""):
+            d[destino] = d[origem]
+    forma = (d.get("payment_method") or "pix")
+    if isinstance(forma, str):
+        forma = forma.strip().lower()
+        forma = {
+            "cartao de credito": "credit card",
+            "cartão de crédito": "credit card",
+            "cartao de debito": "debit card",
+            "cartão de débito": "debit card",
+            "dinheiro": "cash",
+            "transferencia": "transferência",
+            "transfer": "transferência",
+        }.get(forma, forma)
+        d["payment_method"] = forma
+    return d
 
 
 def criar_expense(expense_data):
     """Cria uma nova despesa com parcelas."""
+    expense_data = _normaliza_expense(expense_data)
+    payment_method = (expense_data.get("payment_method") or expense_data.get("formaPagamento") or "pix").lower()
+    is_avista = payment_method in FORMAS_A_VISTA
+    
+    parcelas = expense_data.get("parcelas", [])
+    if not parcelas:
+        installments = expense_data.get("installments", expense_data.get("parcelas", 1))
+        installment_amount = expense_data.get("installmentAmount", expense_data.get("valorParcela", 0))
+        first_due = expense_data.get("firstDueDate", expense_data.get("primeiroVencimento", int(time.time() * 1000)))
+        
+        parcelas = []
+        base_due = first_due
+        for i in range(installments):
+            if i > 0:
+                base_due += 30 * 24 * 60 * 60 * 1000
+            parcela = {
+                "valor": installment_amount,
+                "dueDate": base_due,
+                "paga": is_avista,
+                "paidDate": int(time.time() * 1000) if is_avista else None,
+            }
+            parcelas.append(parcela)
+
+    if is_avista:
+        # A vista: nunca deixa parcela pendente, venha ela de onde vier.
+        _agora_ms = int(time.time() * 1000)
+        for _p in parcelas:
+            _p["paga"] = True
+            if not _p.get("paidDate"):
+                _p["paidDate"] = _agora_ms
+
+    
     nova = {
         "id": str(uuid.uuid4()),
         "em": int(time.time() * 1000),
         "origem": ORIGEM,
-        **expense_data,
+        "title": expense_data.get("title") or expense_data.get("description") or expense_data.get("titulo") or "Despesa",
+        "parcelas": parcelas,
+        "payment_method": payment_method,
+        **{k: v for k, v in expense_data.items() if k not in ["parcelas", "payment_method"]},
     }
     with threading.Lock():
         merged = _ler_cache_finance()
@@ -895,6 +1021,7 @@ def criar_expense(expense_data):
 
 def atualizar_expense(expense_id, updates):
     """Atualiza uma despesa existente."""
+    updates = _normaliza_expense(updates)
     with threading.Lock():
         merged = _ler_cache_finance()
         if expense_id in merged:
