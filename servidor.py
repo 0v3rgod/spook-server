@@ -349,17 +349,25 @@ def coletar_info_arch():
         return {"arch": {"erro": str(e)}}
 
 def coletar_info_servidor():
+    """Info do Arch (notebook), sem SSH.
+
+    A versao antiga rodava `ssh celular ...` no Redmi, que foi aposentado: o
+    ssh ficava pendurado por minutos e o handler `ia_obter_info` nunca
+    respondia, travando a IA (o app esperava para sempre).
+    """
+    dados = dict(coletar_info_arch().get("arch", {}))
+    dados.setdefault(
+        "memoria",
+        f"{dados.get('ram_usado_gb', '?')} GB de {dados.get('ram_total_gb', '?')} GB "
+        f"({dados.get('ram_percent', '?')}%)",
+    )
     try:
-        bateria = json.loads(executar_no_redmi("termux-battery-status"))
-        return {
-            "servidor": {
-                "bateria": f"{bateria.get('percentage', 'N/A')}%",
-                "disco": executar_no_redmi("df -h / | tail -n 1"),
-                "memoria": executar_no_redmi("free -m | sed -n '2p'"),
-            }
-        }
-    except Exception as e:
-        return {"servidor": {"bateria": "Unavailable", "disco": "Unavailable", "memoria": str(e)}}
+        b = psutil.sensors_battery()
+        if b is not None:
+            dados["bateria"] = f"{round(b.percent)}%" + (" (na tomada)" if b.power_plugged else "")
+    except Exception:
+        pass
+    return {"servidor": dados}
 
 
 def coletar_info_celular():
@@ -2002,6 +2010,41 @@ def monitorar_clipboard():
             socketio.emit("clipboard_notebook", {"texto": atual})
 
 
+def perguntar_modelo_livre(pergunta, system=""):
+    """Responde com o modelo LOCAL sem filtro (abliterado), sem tools.
+
+    Usado quando todos os provedores de nuvem recusam o pedido por politica.
+    Vai direto no Ollama em vez do loop ReAct: aqui interessa o texto, nao
+    executar acao. Se o modelo abliterado ainda nao estiver baixado, cai no
+    primeiro modelo disponivel (degrada, mas responde).
+    """
+    from agent import llm as agente_llm
+
+    modelo = os.getenv("OLLAMA_MODEL_LIVRE", "huihui_ai/qwen3-abliterated:8b").strip()
+    mensagens = []
+    if system:
+        mensagens.append({"role": "system", "content": system})
+    mensagens.append({"role": "user", "content": pergunta})
+    try:
+        resp = agente_llm.client.chat.completions.create(
+            model=modelo,
+            messages=mensagens,
+            temperature=0.6,
+            max_tokens=1600,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"[LIVRE] {modelo} falhou ({e}); tentando o modelo padrao", flush=True)
+        modelo = agente_llm.OLLAMA_MODELS[0]
+        resp = agente_llm.client.chat.completions.create(
+            model=modelo,
+            messages=mensagens,
+            temperature=0.6,
+            max_tokens=1600,
+        )
+    texto = (resp.choices[0].message.content or "").strip()
+    return texto, modelo
+
+
 def iniciar_relay_bridge():
     """Conecta este servidor Arch ao hub do Redmi como cliente, para sincronismo instantaneo."""
     global relay_bridge_sio
@@ -2116,22 +2159,35 @@ def iniciar_relay_bridge():
             print(f"[BRIDGE IA ERRO] ia_obter_info: {e}", flush=True)
     @sio.on("ia_agente_perguntar")
     def on_ia_agente_perguntar(dados):
-        """Relay delega a pergunta para o agente local (Ollama no Arch)."""
+        """Relay delega a pergunta para o agente local (Ollama no Arch).
+
+        `livre=True` vem do relay quando TODOS os provedores de nuvem
+        recusaram por politica: nesse caso responde o modelo abliterado sem
+        filtro, sem tools e com o prompt de sistema montado pelo relay.
+        """
         dados = dados or {}
         pergunta = str(dados.get("pergunta", "")).strip()
         usuario = str(dados.get("usuario", "") or "taylor").strip()
         pedido_id = str(dados.get("pedido_id", "") or "")
         sessao_id = str(dados.get("sessao_id", "") or "")
+        livre = bool(dados.get("livre"))
+        system = str(dados.get("system", "") or "")
 
         def trabalho():
             try:
-                print(f"[BRIDGE AGENTE] pergunta ({usuario}): {pergunta[:120]}", flush=True)
-                if not (AGENTE_LOCAL and agente_runtime.disponivel()):
-                    raise RuntimeError("agente local offline")
-                resposta = agente_runtime.perguntar(pergunta, usuario=usuario)
+                print(f"[BRIDGE AGENTE] pergunta ({usuario}) livre={livre}: {pergunta[:120]}", flush=True)
+                if livre:
+                    resposta, modelo = perguntar_modelo_livre(pergunta, system)
+                    motor = "local-livre"
+                else:
+                    if not (AGENTE_LOCAL and agente_runtime.disponivel()):
+                        raise RuntimeError("agente local offline")
+                    resposta = agente_runtime.perguntar(pergunta, usuario=usuario)
+                    modelo = agente_runtime.info().get("modelo")
+                    motor = "local"
                 pacote = {"ok": True, "resposta": resposta, "pedido_id": pedido_id,
-                          "sessao_id": sessao_id, "motor": "local"}
-                print(f"[BRIDGE AGENTE] resposta: {resposta[:160]}", flush=True)
+                          "sessao_id": sessao_id, "motor": motor, "modelo": modelo}
+                print(f"[BRIDGE AGENTE] resposta ({motor}/{modelo}): {resposta[:160]}", flush=True)
             except Exception as e:  # noqa: BLE001
                 print(f"[BRIDGE AGENTE ERRO] {e}", flush=True)
                 pacote = {"ok": False, "resposta": f"Agente local falhou: {e}",
