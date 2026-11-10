@@ -41,6 +41,9 @@ ICON_ROUND = Path.home() / ".local/share/icons/spook_round.png"
 
 ICON = ICON_ROUND if ICON_ROUND.exists() else Path.home() / ".local/share/icons/spook.png"
 AI_URL = "http://100.70.88.101:5000/ia"
+# Log de TODOS os eventos socket (catch-all). Desligado por padrao: com o socket
+# reconectando, o dump de cada evento enchia o journal (1,1M linhas em 2 dias).
+DEBUG_EVENTOS = bool(os.environ.get("SPOOK_OVERLAY_DEBUG"))
 
 CSS = """
 
@@ -2475,11 +2478,13 @@ class SpookOverlay(Gtk.Application):
 
             @self.sio.on("*", namespace="/ia")
             def on_ia_catch_all(event, data):
-                print(f"[OVERLAY] /ia catch-all: {event} = {data}", flush=True)
+                if DEBUG_EVENTOS:
+                    print(f"[OVERLAY] /ia catch-all: {event} = {str(data)[:200]}", flush=True)
 
             @self.sio.on("*")
             def on_catch_all(event, data):
-                print(f"[OVERLAY] default catch-all: {event} = {data}", flush=True)
+                if DEBUG_EVENTOS:
+                    print(f"[OVERLAY] default catch-all: {event} = {str(data)[:200]}", flush=True)
 
             @self.sio.on("connect")
             def on_connect():
@@ -2494,8 +2499,6 @@ class SpookOverlay(Gtk.Application):
                 except Exception:
                     pass
                 self._bg(self._puxar_lists)
-                # Test IA send after 3 seconds - DISABLED (causes repeat due to idle_add)
-                # GLib.idle_add(lambda: GLib.timeout_add_seconds(3, self._test_ia_send))
 
             @self.sio.on("disconnect")
             def on_disconnect():
@@ -2511,19 +2514,6 @@ class SpookOverlay(Gtk.Application):
         except Exception:
             self.sio = None
             self._socket_online = False
-
-    def _test_ia_send(self):
-        """Test IA send after socket connects."""
-        print(f"[OVERLAY] _test_ia_send called", flush=True)
-        if hasattr(self, "sio") and getattr(self.sio, "connected", False):
-            print(f"[OVERLAY] Sending test chat_ia_perguntar", flush=True)
-            self.sio.emit("chat_ia_perguntar", {
-                "pergunta": "Teste automatico do overlay",
-                "sessao_id": self.ia_sessao_id,
-                "usuario": "arch"
-            }, namespace="/ia")
-            print(f"[OVERLAY] Test event sent", flush=True)
-        return False  # Don't repeat
 
     def _aplicar_presenca(self):
         """Presenca do celular mudou: reflete no header e na linha ANDROID."""
@@ -2558,14 +2548,18 @@ class SpookOverlay(Gtk.Application):
         GLib.timeout_add_seconds(3, lambda: (self.chat_status_label.set_text(""), False))
 
     def _puxar_lists(self):
+        # Loga so na MUDANCA de estado; antes imprimia a cada chamada e, com o
+        # socket reconectando, virava spam no journal.
+        online = bool(self.sio and getattr(self.sio, "connected", False))
+        if online != getattr(self, "_lists_estado", None):
+            print("_puxar_lists: emitting" if online else "_puxar_lists: socket not connected", flush=True)
+            self._lists_estado = online
+        if not online:
+            return
         try:
-            if self.sio and getattr(self.sio, "connected", False):
-                print("_puxar_lists: emitting", flush=True)
-                self.sio.emit("chat_listar", {})
-                self.sio.emit("task_listar", {})
-                self.sio.emit("finance_listar", {})
-            else:
-                print("_puxar_lists: socket not connected", flush=True)
+            self.sio.emit("chat_listar", {})
+            self.sio.emit("task_listar", {})
+            self.sio.emit("finance_listar", {})
         except Exception as e:
             print(f"_puxar_lists error: {e}", flush=True)
 
