@@ -31,6 +31,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Pango", "1.0")
 from gi.repository import GLib, Gtk, Pango
 
+from spook_horas import SpookHorasManager
+
 # ============================== CONFIG ==============================
 
 RELAY_URL = "http://100.70.88.101:5000"
@@ -568,6 +570,9 @@ class SpookPadManager:
         self.pilha_vistas = None
         self.seg_notas = None
         self.seg_tarefas = None
+        self.seg_finance = None
+        self.seg_horas = None
+        self.horas_mgr = None
         self.tasks_box = None
         self.task_entry = None
         self.lbl_tasks = None
@@ -1086,6 +1091,10 @@ class SpookPadManager:
         self.seg_finance.add_css_class("pad-seg-btn")
         self.seg_finance.connect("clicked", lambda *_: self._mostrar_vista("finance"))
         seg.append(self.seg_finance)
+        self.seg_horas = Gtk.Button(label="HOURS")
+        self.seg_horas.add_css_class("pad-seg-btn")
+        self.seg_horas.connect("clicked", lambda *_: self._mostrar_vista("horas"))
+        seg.append(self.seg_horas)
         caixa.append(seg)
 
         self.pilha_vistas = Gtk.Stack()
@@ -1112,6 +1121,7 @@ class SpookPadManager:
         self.pilha_vistas.add_named(notas_box, "notas")
         self.pilha_vistas.add_named(self._caixa_tarefas(), "tarefas")
         self.pilha_vistas.add_named(self._caixa_finance(), "finance")
+        self.pilha_vistas.add_named(self._caixa_horas(), "horas")
         self.pilha_vistas.set_visible_child_name("notas")
         self._atualizar_seg("notas")
         caixa.append(self.pilha_vistas)
@@ -1345,6 +1355,13 @@ class SpookPadManager:
         self._fin_mes_atual = datetime.date.today().replace(day=1)
 
         return overlay
+
+    # --------------------------------------------------------------- horas
+    def _caixa_horas(self):
+        """HORAS fica dentro do PAD (mesma aba do FINANCE), como no app."""
+        if self.horas_mgr is None:
+            self.horas_mgr = SpookHorasManager(self.app)
+        return self.horas_mgr.criar_pagina()
 
     # ================================================================ FINANCE HELPERS
     def _fin_mudar_mes(self, delta):
@@ -3367,6 +3384,7 @@ class SpookPadManager:
             (self.seg_notas, "notas"),
             (self.seg_tarefas, "tarefas"),
             (self.seg_finance, "finance"),
+            (self.seg_horas, "horas"),
         ):
             if botao is None:
                 continue
@@ -3382,6 +3400,8 @@ class SpookPadManager:
             self.pedir_tarefas()
         elif vista == "finance":
             self.pedir_finance()
+        elif vista == "horas" and self.horas_mgr is not None:
+            self.horas_mgr.sincronizar()
 
     # ================================================ TAREFAS: transporte
     def pedir_tarefas(self):
