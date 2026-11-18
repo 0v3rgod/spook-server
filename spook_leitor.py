@@ -338,7 +338,7 @@ class SpookLeitorManager:
         ext = (ficha.get("ext") or "pdf").lower()
         titulo = (ficha.get("titulo") or "")[:40]
         try:
-            GLib.idle_add(lambda: self._set_status_sync(f"⇣ Baixando {titulo}..."))
+            GLib.idle_add(lambda: self._set_status_sync(f"⇣ Downloading {titulo}..."))
             import requests
             url = f"{ORACLE_RELAY_URL}/livros/{book_id}/arquivo"
             destino = SPOOK_READER_DIR / f"{book_id}.{ext}"
@@ -352,10 +352,10 @@ class SpookLeitorManager:
                             f.write(pedaco)
             if calcular_book_id(parcial) != book_id:
                 parcial.unlink(missing_ok=True)
-                raise RuntimeError("sha256 nao confere")
+                raise RuntimeError("sha256 mismatch")
             os.replace(parcial, destino)
             ficha["arquivo"] = {**(ficha.get("arquivo") or {}), "noDrive": True}
-            GLib.idle_add(lambda: self._set_status_sync(f"✓ {titulo} baixado"))
+            GLib.idle_add(lambda: self._set_status_sync(f"✓ {titulo} downloaded"))
             GLib.idle_add(self._carregar_biblioteca)
             if abrir:
                 GLib.idle_add(lambda: self._abrir_livro({**ficha, "caminho": str(destino)}))
@@ -365,7 +365,7 @@ class SpookLeitorManager:
                     parcial.unlink(missing_ok=True)
                 except Exception:
                     pass
-            GLib.idle_add(lambda: self._set_status_sync(f"✕ download falhou: {e}"))
+            GLib.idle_add(lambda: self._set_status_sync(f"✕ download failed: {e}"))
         finally:
             self._baixando.discard(book_id)
 
@@ -390,9 +390,9 @@ class SpookLeitorManager:
                         timeout=(10, 900),
                     )
                 r.raise_for_status()
-                GLib.idle_add(lambda: self._set_status_sync(f"✓ {titulo or caminho.stem} publicado"))
+                GLib.idle_add(lambda: self._set_status_sync(f"✓ {titulo or caminho.stem} published"))
             except Exception as e:
-                GLib.idle_add(lambda: self._set_status_sync(f"✕ publicar falhou: {e}"))
+                GLib.idle_add(lambda: self._set_status_sync(f"✕ publish failed: {e}"))
 
         threading.Thread(target=_up, daemon=True).start()
 
@@ -403,7 +403,7 @@ class SpookLeitorManager:
                 self.status_biblioteca_label.remove_css_class("spook-err")
                 self.status_biblioteca_label.add_css_class("spook-ok")
             else:
-                self.status_biblioteca_label.set_text("○ ORACLE OFFLINE (MODO LOCAL)")
+                self.status_biblioteca_label.set_text("○ ORACLE OFFLINE (LOCAL MODE)")
                 self.status_biblioteca_label.remove_css_class("spook-ok")
                 self.status_biblioteca_label.add_css_class("spook-err")
 
@@ -413,8 +413,8 @@ class SpookLeitorManager:
         if 0 <= pagina < self.total_paginas and pagina != self.pagina_atual:
             self._cancelar_sync()
             self.pagina_atual = pagina
-            dev_str = "Poco X7" if "poco" in dispositivo.lower() else (dispositivo or "remoto")
-            self._set_status_sync(f"Posição restaurada do {dev_str}: pág. {pagina + 1}")
+            dev_str = "Poco X7" if "poco" in dispositivo.lower() else (dispositivo or "remote")
+            self._set_status_sync(f"Position restored from {dev_str}: page {pagina + 1}")
             self._supress_sync += 1
             try:
                 self._renderizar_pagina_atual()
@@ -503,19 +503,19 @@ class SpookLeitorManager:
             }
             try:
                 self.sio.emit("livro_atualizar", payload)
-                self._set_status_sync(f"✓ Relay: pág. {self.pagina_atual + 1}")
+                self._set_status_sync(f"✓ Relay: page {self.pagina_atual + 1}")
             except Exception:
                 corpo = {k: v for k, v in payload.items() if k != "bookId"}
                 if self._http_atualizar(book_id, corpo):
-                    self._set_status_sync(f"✓ HTTP: pág. {self.pagina_atual + 1}")
+                    self._set_status_sync(f"✓ HTTP: page {self.pagina_atual + 1}")
                 else:
-                    self._set_status_sync(f"Offline: salvo localmente (pág. {self.pagina_atual + 1})")
+                    self._set_status_sync(f"Offline: saved locally (page {self.pagina_atual + 1})")
         else:
             corpo = {k: v for k, v in payload.items() if k != "bookId"}
             if self._http_atualizar(book_id, corpo):
-                self._set_status_sync(f"✓ HTTP: pág. {self.pagina_atual + 1}")
+                self._set_status_sync(f"✓ HTTP: page {self.pagina_atual + 1}")
             else:
-                self._set_status_sync(f"Offline: salvo localmente (pág. {self.pagina_atual + 1})")
+                self._set_status_sync(f"Offline: saved locally (page {self.pagina_atual + 1})")
 
     def _atualizar_okular_docdata(self, caminho_str: Optional[str], pagina: int):
         if not caminho_str:
@@ -655,7 +655,7 @@ class SpookLeitorManager:
         info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         info_box.set_hexpand(True)
 
-        tit = Gtk.Label(label=livro.get("titulo") or "(sem titulo)", xalign=0)
+        tit = Gtk.Label(label=livro.get("titulo") or "(untitled)", xalign=0)
         tit.add_css_class("spook-loc")
         tit.set_ellipsize(Pango.EllipsizeMode.END)
         info_box.append(tit)
@@ -683,7 +683,7 @@ class SpookLeitorManager:
         # Disponibilidade local / na nuvem
         local = self._caminho_local(book_id, ext)
         if local is None:
-            tag = Gtk.Label(label="⇣ BAIXANDO" if book_id in self._baixando else "☁ DRIVE", xalign=0)
+            tag = Gtk.Label(label="⇣ DOWNLOADING" if book_id in self._baixando else "☁ DRIVE", xalign=0)
             tag.add_css_class("spook-status")
             tag.add_css_class("spook-note")
             sub_linha.append(tag)
@@ -704,7 +704,7 @@ class SpookLeitorManager:
         clique_card.connect("released", lambda _g, _n, _x, _y: self._abrir_livro(livro))
         info_box.add_controller(clique_card)
         info_box.set_cursor_from_name("pointer")
-        info_box.set_tooltip_text("Abrir este livro")
+        info_box.set_tooltip_text("Open this book")
 
         btn_del = Gtk.Button(label="\ue92e")
         btn_del.add_css_class("spook-btn")
@@ -1061,10 +1061,10 @@ class SpookLeitorManager:
             if book_id and (livro.get("arquivo") or {}).get("noDrive"):
                 if book_id not in self._baixando:
                     self._baixando.add(book_id)
-                    self._set_status_sync(f"⇣ Baixando {(livro.get('titulo') or '')[:40]}...")
+                    self._set_status_sync(f"⇣ Downloading {(livro.get('titulo') or '')[:40]}...")
                     threading.Thread(target=self._baixar_livro, args=(livro, True), daemon=True).start()
             else:
-                self._set_status_sync("Arquivo indisponivel aqui: use GOOGLE DRIVE ou OPEN FILE")
+                self._set_status_sync("File not available here: use GOOGLE DRIVE or OPEN FILE")
             return
 
         livro["caminho"] = str(caminho)
@@ -1077,7 +1077,7 @@ class SpookLeitorManager:
             self.doc = fitz.open(str(caminho))
             self.total_paginas = len(self.doc)
         except Exception as e:
-            self._set_status_sync(f"✕ falha ao abrir: {e}")
+            self._set_status_sync(f"✕ failed to open: {e}")
             return
 
         # Qual pagina abrir: o ponteiro global (retomar) manda quando for mais
@@ -1106,7 +1106,7 @@ class SpookLeitorManager:
         self._esconder_chip_remoto()
         if dev and dev != DEVICE_ID:
             dev_tag = "POCO" if "poco" in dev.lower() else ("ARCH" if "arch" in dev.lower() else dev[:10])
-            self._set_status_sync(f"Abrindo na pág. {self.pagina_atual + 1} (de {dev_tag})")
+            self._set_status_sync(f"Opening at page {self.pagina_atual + 1} (from {dev_tag})")
         else:
             self._set_status_sync("Loading document...")
 
@@ -1188,11 +1188,11 @@ class SpookLeitorManager:
         elif "poco" in dev.lower():
             tag = "POCO"
         else:
-            tag = dev[:8].upper() or "REMOTO"
+            tag = dev[:8].upper() or "REMOTE"
         pag = int(ret.get("page") or 0) + 1
         self._chip_alvo = pag - 1
         self.btn_chip_remoto.set_label(f"{tag} p.{pag} · IR")
-        self.btn_chip_remoto.set_tooltip_text(f"{dev} esta na pagina {pag}")
+        self.btn_chip_remoto.set_tooltip_text(f"{dev} is on page {pag}")
         self.btn_chip_remoto.set_visible(True)
 
     def _esconder_chip_remoto(self):

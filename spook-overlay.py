@@ -347,6 +347,71 @@ button.spook-tab-on {
 .spook-msi-inline { font-family: "Material Symbols Rounded"; }
 .spook-btn-text { font-size: 12px; font-weight: 600; }
 .spook-btn-text-sm { font-size: 11px; font-weight: 600; }
+
+/* PAD segment buttons (pills with icons, matching Android AbaPill) */
+.pad-seg-btn {
+  background: transparent;
+  background-image: none;
+  box-shadow: none;
+  border: 1px solid #3A3648;
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: 0;
+  min-width: 0;
+  transition: all 140ms ease;
+}
+.pad-seg-btn:hover {
+  background: rgba(255, 77, 154, 0.1);
+  border-color: #6E6A81;
+}
+.pad-seg-btn:focus {
+  outline: 2px solid #FF4D9A;
+  outline-offset: 2px;
+}
+.pad-seg-btn:hover .pad-seg-lbl,
+.pad-seg-btn:focus .pad-seg-lbl {
+  color: #F4F1FF;
+}
+.pad-seg-lbl {
+  font-family: "JetBrains Mono", "JetBrainsMono NF", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8A8F98;
+  padding: 0 2px;
+}
+
+/* PAD segment buttons - active state (mirrors Android active pill) */
+.pad-seg-btn.pad-seg-on {
+  background: rgba(255, 77, 154, 0.14);
+  border-color: rgba(255, 77, 154, 0.55);
+}
+.pad-seg-btn.pad-seg-on .pad-seg-lbl {
+  color: #FF4D9A;
+}
+.pad-seg-btn.pad-seg-on .spook-msi,
+.pad-seg-btn.pad-seg-on .fin-ico {
+  color: #FF4D9A;
+  background-color: rgba(255, 77, 154, 0.14);
+  border-color: rgba(255, 77, 154, 0.35);
+}
+
+/* Color variants for each pill (NOTES=TASKS=FINANCE=HOURS) */
+.pad-seg-btn.pad-seg-notes.pad-seg-on { background: rgba(156, 255, 87, 0.14); border-color: rgba(156, 255, 87, 0.55); }
+.pad-seg-btn.pad-seg-notes.pad-seg-on .pad-seg-lbl { color: #9CFF57; }
+.pad-seg-btn.pad-seg-notes.pad-seg-on .spook-msi { color: #9CFF57; background-color: rgba(156, 255, 87, 0.14); border-color: rgba(156, 255, 87, 0.35); }
+
+.pad-seg-btn.pad-seg-tasks.pad-seg-on { background: rgba(180, 74, 255, 0.14); border-color: rgba(180, 74, 255, 0.55); }
+.pad-seg-btn.pad-seg-tasks.pad-seg-on .pad-seg-lbl { color: #B44AFF; }
+.pad-seg-btn.pad-seg-tasks.pad-seg-on .spook-msi { color: #B44AFF; background-color: rgba(180, 74, 255, 0.14); border-color: rgba(180, 74, 255, 0.35); }
+
+.pad-seg-btn.pad-seg-finance.pad-seg-on { background: rgba(255, 122, 69, 0.14); border-color: rgba(255, 122, 69, 0.55); }
+.pad-seg-btn.pad-seg-finance.pad-seg-on .pad-seg-lbl { color: #FF7A45; }
+.pad-seg-btn.pad-seg-finance.pad-seg-on .fin-ico { color: #FF7A45; background-color: rgba(255, 122, 69, 0.14); border-color: rgba(255, 122, 69, 0.35); }
+
+.pad-seg-btn.pad-seg-hours.pad-seg-on { background: rgba(180, 74, 255, 0.14); border-color: rgba(180, 74, 255, 0.55); }
+.pad-seg-btn.pad-seg-hours.pad-seg-on .pad-seg-lbl { color: #B44AFF; }
+.pad-seg-btn.pad-seg-hours.pad-seg-on .fin-ico { color: #B44AFF; background-color: rgba(180, 74, 255, 0.14); border-color: rgba(180, 74, 255, 0.35); }
+
 .spook-cmd-danger { border-color: #FF5C6C; }
 
     /* ============================ IA CHAT ============================ */
@@ -1497,8 +1562,8 @@ class SpookOverlay(Gtk.Application):
         box.append(hdr)
 
         filtros = [
-            ("all", "TODOS"), ("image", "IMG"), ("video", "VÍDEO"),
-            ("audio", "ÁUDIO"), ("file", "ARQ"),
+            ("all", "ALL"), ("image", "IMG"), ("video", "VIDEO"),
+            ("audio", "AUDIO"), ("file", "FILE"),
         ]
         filtro_row = Gtk.Box(spacing=6)
         for chave, rotulo in filtros:
@@ -1672,7 +1737,7 @@ class SpookOverlay(Gtk.Application):
                 ns = self.sio.namespaces['/ia']
                 print(f"[OVERLAY] /ia namespace connected: {getattr(ns, 'connected', 'unknown')}", flush=True)
         else:
-            self._ia_on_resposta({"ok": False, "resposta": "Socket não conectado", "motor": ""})
+            self._ia_on_resposta({"ok": False, "resposta": "Socket not connected", "motor": ""})
 
     def _ia_render_mensagens(self):
         """Re-render all messages as cards (like LazyColumn in Android)."""
@@ -1818,7 +1883,7 @@ class SpookOverlay(Gtk.Application):
         items = getattr(self, "galeria_items", [])
         filtro = getattr(self, "galeria_filtro", "all")
         _icone = {"image": "\ue3f4", "video": "\ue04d", "audio": "\ue04f", "file": "\ue8e7"}
-        _rotulo = {"image": "IMG", "video": "VÍDEO", "audio": "ÁUDIO", "file": "ARQ"}
+        _rotulo = {"image": "IMG", "video": "VIDEO", "audio": "AUDIO", "file": "FILE"}
         visiveis = 0
         for item in items:
             nome = item.get("name", "")

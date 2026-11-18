@@ -906,6 +906,16 @@ class SpookPadManager:
             lbl.add_css_class(classe)
         return lbl
 
+    def _icone_svg(self, nome, tamanho=18):
+        """Carrega um ícone SVG dos assets SPOOK (para abas de navegação)."""
+        path = Path.home() / ".local/share/icons/spook" / f"{nome}.svg"
+        try:
+            img = Gtk.Image.new_from_file(str(path))
+            img.set_pixel_size(tamanho)
+            return img
+        except Exception:
+            return Gtk.Label(label="")
+
     # =========================================================== IA TAB
     def _criar_pagina_ia(self):
         """IA chat page with shared memory via relay."""
@@ -940,7 +950,7 @@ class SpookPadManager:
         input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.ia_entry = Gtk.Entry()
         self.ia_entry.set_hexpand(True)
-        self.ia_entry.set_placeholder_text("Pergunte algo... (tasks, notas, finanças, scans, comandos)")
+        self.ia_entry.set_placeholder_text("Ask something... (tasks, notes, finance, scans, commands)")
         self.ia_entry.connect("activate", lambda *_: self._ia_enviar())
         input_box.append(self.ia_entry)
 
@@ -969,13 +979,13 @@ class SpookPadManager:
                 "usuario": "arch"
             }, namespace="/ia")
         else:
-            self._ia_adicionar_mensagem("ia", "⚠ Socket não conectado")
+            self._ia_adicionar_mensagem("ia", "⚠ Socket not connected")
 
     def _ia_adicionar_mensagem(self, origem, texto):
         msg_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         if origem == "usuario":
             msg_box.set_halign(Gtk.Align.END)
-            lbl = Gtk.Label(label=f"Você: {texto}", xalign=1, wrap=True)
+            lbl = Gtk.Label(label=f"You: {texto}", xalign=1, wrap=True)
             lbl.add_css_class("ia-msg-user")
         else:
             msg_box.set_halign(Gtk.Align.START)
@@ -1077,23 +1087,38 @@ class SpookPadManager:
         self.btn_sync_notas = btn_sync
         caixa.append(topo)
 
-        # NOTAS | TAREFAS | FINANÇAS (a janela de tasks/finance vive dentro do PAD)
+        # NOTAS | TAREFAS | FINANÇAS | HOURS — pills with icons (same style as Android app)
         seg = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.seg_notas = Gtk.Button(label="NOTES")
-        self.seg_notas.add_css_class("pad-seg-btn")
-        self.seg_notas.connect("clicked", lambda *_: self._mostrar_vista("notas"))
+
+        def _pill(texto, icone_svg, icone_msi, vista_nome, variant_class):
+            conteudo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+            conteudo.set_valign(Gtk.Align.CENTER)
+            if icone_svg:
+                ic = self._icone_svg(icone_svg, 16)
+                ic.add_css_class("spook-msi")
+                conteudo.append(ic)
+            elif icone_msi:
+                ic = Gtk.Label(label=icone_msi)
+                ic.add_css_class("fin-ico")
+                ic.add_css_class("spook-msi")
+                conteudo.append(ic)
+            lbl = Gtk.Label(label=texto)
+            lbl.add_css_class("pad-seg-lbl")
+            conteudo.append(lbl)
+            btn = Gtk.Button()
+            btn.set_child(conteudo)
+            btn.add_css_class("pad-seg-btn")
+            btn.add_css_class(f"pad-seg-{variant_class}")
+            btn.connect("clicked", lambda *_: self._mostrar_vista(vista_nome))
+            return btn
+
+        self.seg_notas = _pill("NOTES", "note", None, "notas", "notes")
         seg.append(self.seg_notas)
-        self.seg_tarefas = Gtk.Button(label="TASKS")
-        self.seg_tarefas.add_css_class("pad-seg-btn")
-        self.seg_tarefas.connect("clicked", lambda *_: self._mostrar_vista("tarefas"))
+        self.seg_tarefas = _pill("TASKS", "robot", None, "tarefas", "tasks")
         seg.append(self.seg_tarefas)
-        self.seg_finance = Gtk.Button(label="FINANCE")
-        self.seg_finance.add_css_class("pad-seg-btn")
-        self.seg_finance.connect("clicked", lambda *_: self._mostrar_vista("finance"))
+        self.seg_finance = _pill("FINANCE", None, "\uec1d", "finance", "finance")  # wallet
         seg.append(self.seg_finance)
-        self.seg_horas = Gtk.Button(label="HOURS")
-        self.seg_horas.add_css_class("pad-seg-btn")
-        self.seg_horas.connect("clicked", lambda *_: self._mostrar_vista("horas"))
+        self.seg_horas = _pill("HOURS", None, "\uf27e", "horas", "hours")  # history
         seg.append(self.seg_horas)
         caixa.append(seg)
 
@@ -2881,7 +2906,7 @@ class SpookPadManager:
         if due:
             from datetime import datetime as dt
             try:
-                due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m")
+                due_str = dt.fromtimestamp(due / 1000).strftime("%d/%m %H:%M")
                 atrasada = due < int(time.time() * 1000)
                 due_lbl = Gtk.Label(xalign=0)
                 due_lbl.set_markup(
@@ -3238,7 +3263,7 @@ class SpookPadManager:
         if not self.ed_id:
             return
         nid = self.ed_id
-        win, raiz = self._janela_modal("SPOOK // HISTORICO")
+        win, raiz = self._janela_modal("SPOOK // HISTORY")
         cab = Gtk.Label(label="NOTE HISTORY", xalign=0)
         cab.add_css_class("spook-title")
         raiz.append(cab)
@@ -3315,7 +3340,7 @@ class SpookPadManager:
         if not self.ed_id:
             return
         nid = self.ed_id
-        win, raiz = self._janela_modal("SPOOK // APAGAR", 520, 240)
+        win, raiz = self._janela_modal("SPOOK // DELETE", 520, 240)
         lab = Gtk.Label(
             label="Delete this note?\n\nIt disappears from every device.\nThe file stays in Drive (tombstone).",
             justify=Gtk.Justification.CENTER,
@@ -3388,9 +3413,10 @@ class SpookPadManager:
         ):
             if botao is None:
                 continue
-            botao.remove_css_class("pad-seg-on")
-            botao.remove_css_class("pad-seg-btn")
-            botao.add_css_class("pad-seg-on" if nome == vista else "pad-seg-btn")
+            if nome == vista:
+                botao.add_css_class("pad-seg-on")
+            else:
+                botao.remove_css_class("pad-seg-on")
 
     def _mostrar_vista(self, vista):
         if self.pilha_vistas is not None:
@@ -3656,6 +3682,7 @@ class SpookPadManager:
         self._due_cal.set_show_day_names(True)
 
         due = task.get("due_date") or task.get("dueDate")
+        hora_padrao, min_padrao = 9, 0
         try:
             if due:
                 dt = datetime.datetime.fromtimestamp(due / 1000)
@@ -3668,9 +3695,32 @@ class SpookPadManager:
                 else:
                     self._due_cal.select_month(dt.month - 1, dt.year)
                     self._due_cal.select_day(dt.day)
+                # vencimento antigo era meia-noite: sugere 09:00
+                if not (dt.hour == 0 and dt.minute == 0):
+                    hora_padrao, min_padrao = dt.hour, dt.minute
         except Exception:
             pass
         caixa.append(self._due_cal)
+
+        # HORA / MIN — mesmo padrao do app Android
+        linha_hora = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        lbl_hora = Gtk.Label(label="TIME", xalign=0)
+        lbl_hora.add_css_class("horas-mini")
+        linha_hora.append(lbl_hora)
+        self._due_hora = Gtk.SpinButton.new_with_range(0, 23, 1)
+        self._due_hora.set_value(hora_padrao)
+        self._due_hora.set_wrap(True)
+        self._due_hora.add_css_class("spook-input")
+        linha_hora.append(self._due_hora)
+        dois_pontos = Gtk.Label(label=":", xalign=0.5)
+        dois_pontos.add_css_class("horas-linha")
+        linha_hora.append(dois_pontos)
+        self._due_min = Gtk.SpinButton.new_with_range(0, 59, 1)
+        self._due_min.set_value(min_padrao)
+        self._due_min.set_wrap(True)
+        self._due_min.add_css_class("spook-input")
+        linha_hora.append(self._due_min)
+        caixa.append(linha_hora)
 
         linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         linha.set_halign(Gtk.Align.END)
@@ -3707,7 +3757,9 @@ class SpookPadManager:
                 ano = valor.get_year()
                 mes0 = valor.get_month() - 1
                 dia = valor.get_day_of_month()
-            dt = datetime.datetime(ano, mes0 + 1, dia, 23, 59, 59)
+            dt = datetime.datetime(ano, mes0 + 1, dia,
+                                   int(self._due_hora.get_value()),
+                                   int(self._due_min.get_value()))
             due_ms = int(dt.timestamp() * 1000)
             if callable(self.task_due_cb):
                 self.task_due_cb(task.get("id"), due_ms)

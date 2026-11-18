@@ -49,8 +49,8 @@ TIPO_FIM_SEMANA = "fim_semana"
 TIPO_FERIADO = "feriado"
 ROTULO_TIPO = {
     TIPO_NORMAL: "NORMAL",
-    TIPO_FIM_SEMANA: "FIM DE SEMANA",
-    TIPO_FERIADO: "FERIADO",
+    TIPO_FIM_SEMANA: "WEEKEND",
+    TIPO_FERIADO: "HOLIDAY",
 }
 
 CSS_HORAS = """
@@ -167,7 +167,7 @@ def _nome_dia(hid: str) -> str:
     d = _data_de(hid)
     if not d:
         return ""
-    return ("SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM")[d.weekday()]
+    return ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")[d.weekday()]
 
 
 def _tipo_sugerido(hid: str) -> str:
@@ -762,7 +762,7 @@ class SpookHorasManager:
         topo = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         coluna = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
         coluna.set_hexpand(True)
-        titulo = Gtk.Label(label="HORAS", xalign=0)
+        titulo = Gtk.Label(label="HOURS", xalign=0)
         titulo.add_css_class("horas-titulo")
         coluna.append(titulo)
         self.lbl_status = Gtk.Label(label="…", xalign=0)
@@ -770,7 +770,16 @@ class SpookHorasManager:
         coluna.append(self.lbl_status)
         topo.append(coluna)
 
-        btn_sync = Gtk.Button(label="SYNC")
+        # SYNC button with icon (same style as Android)
+        btn_sync = Gtk.Button()
+        btn_sync.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6))
+        ic_sync = Gtk.Label(label="\uf61b")  # sync_alt
+        ic_sync.add_css_class("fin-ico")
+        ic_sync.add_css_class("spook-msi")
+        btn_sync.get_child().append(ic_sync)
+        lbl_sync = Gtk.Label(label="SYNC")
+        lbl_sync.add_css_class("spook-btn-text-sm")
+        btn_sync.get_child().append(lbl_sync)
         btn_sync.add_css_class("spook-btn")
         btn_sync.set_valign(Gtk.Align.CENTER)
         btn_sync.connect("clicked", lambda *_: (self.sincronizar(True),
@@ -778,7 +787,7 @@ class SpookHorasManager:
         topo.append(btn_sync)
         caixa.append(topo)
 
-        # ---------------------------------------------------------- HOJE
+        # ---------------------------------------------------------- TODAY
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         card.add_css_class("horas-card")
         self.card_hoje = card
@@ -788,7 +797,7 @@ class SpookHorasManager:
         self.lbl_data.add_css_class("horas-linha")
         self.lbl_data.set_hexpand(True)
         linha.append(self.lbl_data)
-        self.lbl_estado = Gtk.Label(label="FORA", xalign=1)
+        self.lbl_estado = Gtk.Label(label="OUT", xalign=1)
         self.lbl_estado.add_css_class("horas-estado")
         self.lbl_estado.add_css_class("horas-estado-fora")
         linha.append(self.lbl_estado)
@@ -804,9 +813,9 @@ class SpookHorasManager:
         self.box_tempos = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         card.append(self.box_tempos)
 
-        # tipo do dia
+        # day type
         tipo_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        lbl_tipo = Gtk.Label(label="TIPO", xalign=0)
+        lbl_tipo = Gtk.Label(label="TYPE", xalign=0)
         lbl_tipo.add_css_class("horas-mini")
         lbl_tipo.set_size_request(58, -1)
         tipo_box.append(lbl_tipo)
@@ -815,20 +824,20 @@ class SpookHorasManager:
             btn = Gtk.Button(label=texto)
             btn.add_css_class("horas-chip")
             btn.connect("clicked", lambda *_: self._definir_tipo(
-                {"NORMAL": TIPO_NORMAL, "FIM DE SEMANA": TIPO_FIM_SEMANA,
-                 "FERIADO": TIPO_FERIADO}[texto], classe_on))
+                {"NORMAL": TIPO_NORMAL, "WEEKEND": TIPO_FIM_SEMANA,
+                 "HOLIDAY": TIPO_FERIADO}[texto], classe_on))
             return btn
 
         self.seg_normal = _chip("NORMAL", "horas-chip-on-normal")
-        self.seg_fds = _chip("FIM DE SEMANA", "horas-chip-on-fds")
-        self.seg_feriado = _chip("FERIADO", "horas-chip-on-feriado")
+        self.seg_fds = _chip("WEEKEND", "horas-chip-on-fds")
+        self.seg_feriado = _chip("HOLIDAY", "horas-chip-on-feriado")
         tipo_box.append(self.seg_normal)
         tipo_box.append(self.seg_fds)
         tipo_box.append(self.seg_feriado)
         card.append(tipo_box)
 
-        # descricao (autosave)
-        lbl_desc = Gtk.Label(label="DESCRIÇÃO DO DIA", xalign=0)
+        # description (autosave)
+        lbl_desc = Gtk.Label(label="DAY NOTE", xalign=0)
         lbl_desc.add_css_class("horas-mini")
         card.append(lbl_desc)
         self.txt_desc = Gtk.TextView()
@@ -841,19 +850,23 @@ class SpookHorasManager:
         scroll_desc.add_css_class("spook-input")
         card.append(scroll_desc)
 
-        # local (texto livre; o GPS vem do celular)
+        # location (free text; GPS comes from phone)
         local_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        lbl_local = Gtk.Label(label="LOCAL", xalign=0)
+        lbl_local = Gtk.Label(label="LOCATION", xalign=0)
         lbl_local.add_css_class("horas-mini")
         lbl_local.set_size_request(58, -1)
         local_box.append(lbl_local)
+        ic_loc = Gtk.Label(label="\ue0c8")  # pin / place
+        ic_loc.add_css_class("fin-ico")
+        ic_loc.add_css_class("spook-msi")
+        local_box.append(ic_loc)
         self.ent_local = Gtk.Entry()
         self.ent_local.add_css_class("spook-input")
         self.ent_local.set_hexpand(True)
-        self.ent_local.set_placeholder_text("local (opcional)")
+        self.ent_local.set_placeholder_text("location (optional)")
         self.ent_local.connect("activate", lambda *_: self._salvar_local_texto())
         local_box.append(self.ent_local)
-        btn_local = Gtk.Button(label="SALVAR")
+        btn_local = Gtk.Button(label="SAVE")
         btn_local.add_css_class("spook-btn")
         btn_local.add_css_class("spook-btn-text-sm")
         btn_local.connect("clicked", lambda *_: self._salvar_local_texto())
@@ -862,16 +875,24 @@ class SpookHorasManager:
 
         caixa.append(card)
 
-        # ---------------------------------------------------- HISTÓRICO
+        # ---------------------------------------------------- HISTORY
         topo_hist = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.lbl_hist = Gtk.Label(label="HISTÓRICO", xalign=0)
+        self.lbl_hist = Gtk.Label(label="HISTORY", xalign=0)
         self.lbl_hist.add_css_class("horas-sub")
         self.lbl_hist.set_hexpand(True)
         topo_hist.append(self.lbl_hist)
 
-        btn_exp = Gtk.Button(label="RELATÓRIO")
+        # REPORT button with icon
+        btn_exp = Gtk.Button()
+        btn_exp.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6))
+        ic_report = Gtk.Label(label="\ue873")  # report
+        ic_report.add_css_class("fin-ico")
+        ic_report.add_css_class("spook-msi")
+        btn_exp.get_child().append(ic_report)
+        lbl_report = Gtk.Label(label="REPORT")
+        lbl_report.add_css_class("spook-btn-text-sm")
+        btn_exp.get_child().append(lbl_report)
         btn_exp.add_css_class("spook-btn")
-        btn_exp.add_css_class("spook-btn-text-sm")
         btn_exp.connect("clicked", lambda *_: self._abrir_exportar())
         topo_hist.append(btn_exp)
         caixa.append(topo_hist)
@@ -940,13 +961,13 @@ class SpookHorasManager:
 
         self.lbl_data.set_text("%s · %s" % (_fmt_data(hid), _nome_dia(hid)))
         if pausa:
-            estado, classe = "EM INTERVALO", "horas-estado-pausa"
+            estado, classe = "ON BREAK", "horas-estado-pausa"
         elif trabalhando:
-            estado, classe = "TRABALHANDO", "horas-estado-vivo"
+            estado, classe = "WORKING", "horas-estado-vivo"
         elif encerrado:
-            estado, classe = "ENCERRADO", "horas-estado-fim"
+            estado, classe = "CLOSED", "horas-estado-fim"
         else:
-            estado, classe = "FORA", "horas-estado-fora"
+            estado, classe = "OUT", "horas-estado-fora"
         for c in ("horas-estado-vivo", "horas-estado-pausa",
                   "horas-estado-fim", "horas-estado-fora"):
             self.lbl_estado.remove_css_class(c)
@@ -958,45 +979,61 @@ class SpookHorasManager:
         else:
             self.card_hoje.remove_css_class("horas-card-vivo")
 
-        # botoes
+        # action buttons with icons (matching Android app style)
         while (c := self.box_acoes.get_first_child()):
             self.box_acoes.remove(c)
 
-        def _botao(texto, classe_extra, acao):
-            btn = Gtk.Button(label=texto)
+        def _botao_icon(texto, icone, classe_extra, acao):
+            """Create a button with Material Symbol icon + text."""
+            btn = Gtk.Button()
+            btn.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6))
+            ic = Gtk.Label(label=icone)
+            ic.add_css_class("fin-ico")
+            ic.add_css_class("spook-msi")
+            btn.get_child().append(ic)
+            lbl = Gtk.Label(label=texto)
+            lbl.add_css_class("spook-btn-text-sm")
+            btn.get_child().append(lbl)
             btn.add_css_class("spook-btn")
             if classe_extra:
                 btn.add_css_class(classe_extra)
             btn.set_hexpand(True)
             btn.connect("clicked", lambda *_: acao())
             self.box_acoes.append(btn)
+            return btn
 
         if not trabalhando and not encerrado:
-            _botao("ENTRADA", "spook-accent", self._acao_entrada)
+            # CLOCK IN - login icon
+            _botao_icon("CLOCK IN", "\ue231", "spook-accent", self._acao_entrada)
         elif trabalhando:
             if pausa:
-                _botao("VOLTEI", None, self._acao_voltei)
+                # BACK - restart_alt not found, use arrow_back_2 equivalent or play
+                _botao_icon("BACK", "\uf080", None, self._acao_voltei)  # play_arrow.fill as "back to work"
             else:
-                _botao("INTERVALO", None, self._acao_intervalo)
-            _botao("SAÍDA", None, self._acao_saida)
+                # BREAK - pause
+                _botao_icon("BREAK", "\ue82e", None, self._acao_intervalo)
+            # CLOCK OUT - logout
+            _botao_icon("CLOCK OUT", "\ue230", None, self._acao_saida)
         else:
-            _botao("REABRIR", None, self._acao_reabrir)
-            _botao("FECHAR DIA", "spook-accent", self._abrir_exportar)
+            # REOPEN - restart_alt not found, use autorenew
+            _botao_icon("REOPEN", "\ue87a", None, self._acao_reabrir)
+            # CLOSE DAY - check
+            _botao_icon("CLOSE DAY", "\ue255", "spook-accent", self._abrir_exportar)
 
-        # linhas de horario
+        # time rows
         while (c := self.box_tempos.get_first_child()):
             self.box_tempos.remove(c)
 
-        self._linha_hora("ENTRADA", entrada, lambda: self._editar_hora(
-            "Entrada", entrada, self._definir_entrada))
-        self._linha_hora("SAÍDA", saida, lambda: self._editar_hora(
-            "Saída", saida, self._definir_saida))
+        self._linha_hora("CLOCK IN", entrada, lambda: self._editar_hora(
+            "Clock In", entrada, self._definir_entrada))
+        self._linha_hora("CLOCK OUT", saida, lambda: self._editar_hora(
+            "Clock Out", saida, self._definir_saida))
         for i, it in enumerate(dia.get("intervalos") or []):
             inicio = _int(it.get("inicio"))
             fim = _int(it.get("fim"))
             self._linha_intervalo(i, inicio, fim)
 
-        # tipo
+        # type
         tipo = dia.get("tipo") or TIPO_NORMAL
         for botao, nome, classe in (
             (self.seg_normal, TIPO_NORMAL, "horas-chip-on-normal"),
@@ -1009,7 +1046,7 @@ class SpookHorasManager:
             if nome == tipo:
                 botao.add_css_class(classe)
 
-        # descricao e local (nao pisa no que o usuario esta digitando)
+        # description and local (don't overwrite while user is typing)
         if not self.txt_desc.has_focus() and not self._desc_sujo:
             buffer = self.txt_desc.get_buffer()
             if buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True) != (
@@ -1031,7 +1068,16 @@ class SpookHorasManager:
         valor_lbl.add_css_class("horas-hora-valor")
         valor_lbl.set_hexpand(True)
         linha.append(valor_lbl)
-        btn = Gtk.Button(label="EDITAR")
+        # EDIT button with icon
+        btn = Gtk.Button()
+        btn.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+        ic_edit = Gtk.Label(label="\uec0f")  # edit.fill
+        ic_edit.add_css_class("fin-ico")
+        ic_edit.add_css_class("spook-msi")
+        btn.get_child().append(ic_edit)
+        lbl_edit = Gtk.Label(label="EDIT")
+        lbl_edit.add_css_class("spook-btn-text-sm")
+        btn.get_child().append(lbl_edit)
         btn.add_css_class("spook-btn")
         btn.add_css_class("spook-btn-text-sm")
         btn.connect("clicked", lambda *_: ao_editar())
@@ -1041,7 +1087,7 @@ class SpookHorasManager:
 
     def _linha_intervalo(self, indice, inicio, fim):
         linha = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        lbl = Gtk.Label(label="INTERVALO %d" % (indice + 1), xalign=0)
+        lbl = Gtk.Label(label="BREAK %d" % (indice + 1), xalign=0)
         lbl.add_css_class("horas-linha")
         lbl.set_size_request(120, -1)
         linha.append(lbl)
@@ -1051,23 +1097,48 @@ class SpookHorasManager:
         valor_lbl.set_hexpand(True)
         linha.append(valor_lbl)
 
-        btn_ini = Gtk.Button(label="INÍCIO")
+        # START button with icon
+        btn_ini = Gtk.Button()
+        btn_ini.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+        ic_start = Gtk.Label(label="\uf080")  # play_arrow.fill
+        ic_start.add_css_class("fin-ico")
+        ic_start.add_css_class("spook-msi")
+        btn_ini.get_child().append(ic_start)
+        lbl_start = Gtk.Label(label="START")
+        lbl_start.add_css_class("spook-btn-text-sm")
+        btn_ini.get_child().append(lbl_start)
         btn_ini.add_css_class("spook-btn")
         btn_ini.add_css_class("spook-btn-text-sm")
         btn_ini.connect("clicked", lambda *_: self._editar_hora(
-            "Intervalo %d — início" % (indice + 1), inicio,
+            "Break %d — start" % (indice + 1), inicio,
             lambda valor: self._definir_intervalo(indice, inicio=valor)))
         linha.append(btn_ini)
 
-        btn_fim = Gtk.Button(label="FIM")
+        # END button with icon
+        btn_fim = Gtk.Button()
+        btn_fim.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+        ic_end = Gtk.Label(label="\ue82e")  # pause.fill
+        ic_end.add_css_class("fin-ico")
+        ic_end.add_css_class("spook-msi")
+        btn_fim.get_child().append(ic_end)
+        lbl_end = Gtk.Label(label="END")
+        lbl_end.add_css_class("spook-btn-text-sm")
+        btn_fim.get_child().append(lbl_end)
         btn_fim.add_css_class("spook-btn")
         btn_fim.add_css_class("spook-btn-text-sm")
         btn_fim.connect("clicked", lambda *_: self._editar_hora(
-            "Intervalo %d — fim" % (indice + 1), fim,
+            "Break %d — end" % (indice + 1), fim,
             lambda valor: self._definir_intervalo(indice, fim=valor)))
         linha.append(btn_fim)
 
-        btn_del = Gtk.Button(label="X")
+        # DELETE button with icon (close)
+        btn_del = Gtk.Button()
+        btn_del.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+        ic_del = Gtk.Label(label="\ue317")  # close
+        ic_del.add_css_class("fin-ico")
+        ic_del.add_css_class("spook-msi")
+        ic_del.add_css_class("spook-msi-del")
+        btn_del.get_child().append(ic_del)
         btn_del.add_css_class("spook-btn")
         btn_del.add_css_class("spook-btn-text-sm")
         btn_del.connect("clicked", lambda *_: self._remover_intervalo(indice))
@@ -1083,9 +1154,9 @@ class SpookHorasManager:
         hoje = _hoje_id()
         outros = [d for d in self.listar() if str(d.get("id")) != hoje]
         if self.lbl_hist is not None:
-            self.lbl_hist.set_text("HISTÓRICO · %d DIA(S)" % len(outros))
+            self.lbl_hist.set_text("HISTORY · %d DAY(S)" % len(outros))
         if not outros:
-            vazio = Gtk.Label(label="nenhum dia registrado ainda", xalign=0)
+            vazio = Gtk.Label(label="no days recorded yet", xalign=0)
             vazio.add_css_class("horas-dia-meta")
             self.box_hist.append(vazio)
             return
@@ -1111,7 +1182,7 @@ class SpookHorasManager:
                                 _fmt_hora(_int(dia.get("saida"))))
             intervalos = _minutos_intervalos(dia)
             if intervalos > 0:
-                meta += "   intervalo %s" % _fmt_duracao(intervalos)
+                meta += "   break %s" % _fmt_duracao(intervalos)
             desc = str(dia.get("descricao") or "").replace("\n", " ").strip()
             if desc:
                 meta += "   %s" % desc[:90]
@@ -1121,7 +1192,14 @@ class SpookHorasManager:
             coluna.append(lbl_meta)
             card.append(coluna)
 
-            btn_del = Gtk.Button(label="Del")
+            # DELETE button with icon
+            btn_del = Gtk.Button()
+            btn_del.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4))
+            ic_del = Gtk.Label(label="\ue317")  # close
+            ic_del.add_css_class("fin-ico")
+            ic_del.add_css_class("spook-msi")
+            ic_del.add_css_class("spook-msi-del")
+            btn_del.get_child().append(ic_del)
             btn_del.add_css_class("spook-btn")
             btn_del.add_css_class("spook-btn-text-sm")
             btn_del.connect("clicked", lambda *_, hid=str(dia.get("id")): self._apagar(hid))
@@ -1296,8 +1374,8 @@ class SpookHorasManager:
 
     def _abrir_exportar(self):
         janela = self.app.janela if getattr(self.app, "janela", None) else None
-        dialogo = Gtk.Dialog(title="Exportar horas", transient_for=janela, modal=True)
-        dialogo.add_button("FECHAR", Gtk.ResponseType.CLOSE)
+        dialogo = Gtk.Dialog(title="Export hours", transient_for=janela, modal=True)
+        dialogo.add_button("CLOSE", Gtk.ResponseType.CLOSE)
         dialogo.set_default_size(560, -1)
 
         area = dialogo.get_content_area()
@@ -1307,7 +1385,7 @@ class SpookHorasManager:
         area.set_margin_start(14)
         area.set_margin_end(14)
 
-        titulo = Gtk.Label(label="EXPORTAR HORAS", xalign=0)
+        titulo = Gtk.Label(label="EXPORT HOURS", xalign=0)
         titulo.add_css_class("horas-titulo")
         area.append(titulo)
 
@@ -1335,13 +1413,13 @@ class SpookHorasManager:
             grade.attach(box, coluna, linha, 1, 1)
             return ent
 
-        campos["valor_hora"] = _campo(0, 0, "R$/HORA", "")
-        campos["jornada"] = _campo(0, 1, "JORNADA (h)", "8")
-        campos["extra"] = _campo(1, 0, "EXTRA %", "50")
-        campos["feriado"] = _campo(1, 1, "FERIADO %", "100")
-        campos["fds"] = _campo(1, 2, "FDS %", "50")
+        campos["valor_hora"] = _campo(0, 0, "R$/HOUR", "")
+        campos["jornada"] = _campo(0, 1, "DAY JOURNEY (h)", "8")
+        campos["extra"] = _campo(1, 0, "OVERTIME %", "50")
+        campos["feriado"] = _campo(1, 1, "HOLIDAY %", "100")
+        campos["fds"] = _campo(1, 2, "WEEKEND %", "50")
 
-        chk = Gtk.CheckButton(label="contar horas acima da jornada como extras")
+        chk = Gtk.CheckButton(label="count hours above journey as overtime")
         chk.set_active(True)
         chk.add_css_class("horas-linha")
         area.append(chk)
@@ -1378,7 +1456,7 @@ class SpookHorasManager:
         def _atualizar(_widget=None, *_args):
             resumo = _resumo()
             self.lbl_exp_resumo.set_text(
-                "%d dia(s) · %s · %s extra" % (
+                "%d day(s) · %s · %s overtime" % (
                     len(resumo["linhas"]),
                     _fmt_duracao(resumo["total_min"]),
                     _fmt_duracao(resumo["total_extras"]),
@@ -1386,7 +1464,7 @@ class SpookHorasManager:
             lbl_total.set_text("TOTAL: %s  ·  %s" % (
                 _fmt_duracao(resumo["total_min"]), _dinheiro(resumo["valor_total"])))
             lbl_tipos.set_text(
-                "normais %s · fds %s · feriado %s" % (
+                "normal %s · weekend %s · holiday %s" % (
                     _fmt_duracao(resumo["min_normal"]),
                     _fmt_duracao(resumo["min_fds"]),
                     _fmt_duracao(resumo["min_feriado"]),
@@ -1399,9 +1477,26 @@ class SpookHorasManager:
 
         acoes = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         acoes.set_halign(Gtk.Align.END)
-        btn_csv = Gtk.Button(label="EXPORTAR CSV")
+        btn_csv = Gtk.Button()
+        btn_csv.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6))
+        ic_csv = Gtk.Label(label="\ue013")  # note.fill
+        ic_csv.add_css_class("fin-ico")
+        ic_csv.add_css_class("spook-msi")
+        btn_csv.get_child().append(ic_csv)
+        lbl_csv = Gtk.Label(label="EXPORT CSV")
+        lbl_csv.add_css_class("spook-btn-text-sm")
+        btn_csv.get_child().append(lbl_csv)
         btn_csv.add_css_class("spook-btn")
-        btn_docx = Gtk.Button(label="EXPORTAR DOCX")
+
+        btn_docx = Gtk.Button()
+        btn_docx.set_child(Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6))
+        ic_docx = Gtk.Label(label="\ue873")  # report
+        ic_docx.add_css_class("fin-ico")
+        ic_docx.add_css_class("spook-msi")
+        btn_docx.get_child().append(ic_docx)
+        lbl_docx = Gtk.Label(label="EXPORT DOCX")
+        lbl_docx.add_css_class("spook-btn-text-sm")
+        btn_docx.get_child().append(lbl_docx)
         btn_docx.add_css_class("spook-btn")
         btn_docx.add_css_class("spook-accent")
         acoes.append(btn_csv)
@@ -1411,23 +1506,23 @@ class SpookHorasManager:
         def _exportar(formato):
             resumo = _atualizar()
             if not resumo["linhas"]:
-                lbl_resultado.set_text("> nenhum dia fechado para exportar")
+                lbl_resultado.set_text("> no closed days to export")
                 return
             try:
                 EXPORT_DIR.mkdir(parents=True, exist_ok=True)
                 inicio = resumo["inicio"] or _hoje_id()
                 fim = resumo["fim"] or inicio
                 carimbo = datetime.datetime.now().strftime("%H%M%S")
-                base = "horas_%s_%s_%s" % (inicio, fim, carimbo)
+                base = "hours_%s_%s_%s" % (inicio, fim, carimbo)
                 if formato == "csv":
                     destino = EXPORT_DIR / (base + ".csv")
                     destino.write_text(_csv(resumo), encoding="utf-8")
                 else:
                     destino = EXPORT_DIR / (base + ".docx")
                     _docx_horas(resumo, str(destino))
-                lbl_resultado.set_text("> salvo em %s" % destino)
+                lbl_resultado.set_text("> saved to %s" % destino)
             except Exception as e:
-                lbl_resultado.set_text("> falhou: %s" % e)
+                lbl_resultado.set_text("> failed: %s" % e)
 
         btn_csv.connect("clicked", lambda *_: _exportar("csv"))
         btn_docx.connect("clicked", lambda *_: _exportar("docx"))
