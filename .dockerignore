@@ -1,0 +1,11 @@
+.git/
+.gitignore
+.venv/
+__pycache__/
+*.pyc
+*.bak*
+*.backup*
+data/
+relatorios/
+notificacoes.jsonl
+localizacao.json
